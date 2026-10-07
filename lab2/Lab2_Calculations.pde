@@ -32,7 +32,7 @@ float ecgMin = 1023;
 float ecgMax = 0;
 
 float threshold = 0;
-float thresholdFraction = 0.65;
+float thresholdFraction = 0.8;
 
 boolean below_threshold = true;
 
@@ -50,7 +50,7 @@ int BPM = 0;
 // ---------------- FSR ----------------
 
 // Moving average: 5 samples
-float[] fsrWindow = new float[5];
+float[] fsrWindow = new float[50];
 
 int fsrWindowIndex = 0;
 int fsrWindowCount = 0;
@@ -61,7 +61,12 @@ float current_mean = 0;
 float previous_mean = 0;
 
 float dFSR = 0;
+int n_window_fsr = 50; 
 
+int breathing_counter = 0;
+
+
+float previous_breath_mean = 0;
 
 // Change this value after looking at the real signal
 float eps = 0.2;
@@ -166,6 +171,7 @@ void serialEvent(Serial p) {
   }
 
 
+ 
   ECG = int(values[0]);   // Convert the string into an integer --> values[0] = 'ECG' but it is a string
   FSR = int(values[1]);    // this gives back the integer corresponding to ECG
  
@@ -251,7 +257,7 @@ void updateECG() {
     }
 
 
-    if (millis() - ecgCalibrationStart >= 5000) {
+    if ( millis() - ecgCalibrationStart < 5000 &&  millis() - ecgCalibrationStart >= 15000) {
 
       threshold =  ecgMin + thresholdFraction * (ecgMax - ecgMin);
       ecgCalibrated = true;
@@ -266,6 +272,8 @@ void updateECG() {
   // -----------------------------------------
   // R peak detection
   // -----------------------------------------
+  
+ 
 
   if (ECG_filtered > threshold && below_threshold == true && (beat_old == 0 || millis() - beat_old > 250)) {
     calculateBPM();
@@ -304,7 +312,7 @@ void calculateBPM() {
         beatCount++;
       }
 
-      float total = 0;7
+      float total = 0.7;
       for (int i = 0; i < beatCount; i++) {     // sum of the samples in the window
         total = total + beats[i];
       }
@@ -325,31 +333,64 @@ void calculateBPM() {
 
 void updateFSR() {
 
-    if (FSR == 0) {     // For now ignore zero values
+  if (FSR == 0) {
     return;
   }
 
-  previous_mean = current_mean;
 
-  fsrSum = fsrSum - fsrWindow[fsrWindowIndex];   // Remove oldest value
-  fsrWindow[fsrWindowIndex] = FSR;             // Insert newest value
-  fsrSum = fsrSum + FSR;                        // Add newest value
+  // ----- MOVING AVERAGE -----
 
-  fsrWindowIndex = (fsrWindowIndex + 1) % 5;
+  fsrSum = fsrSum - fsrWindow[fsrWindowIndex];   // remove oldest value
+
+  fsrWindow[fsrWindowIndex] = FSR;               // insert newest value
+
+  fsrSum = fsrSum + FSR;
+
+  fsrWindowIndex = (fsrWindowIndex + 1) % n_window_fsr;
 
 
-  if (fsrWindowCount < 5) {
+  if (fsrWindowCount < n_window_fsr) {
     fsrWindowCount++;
   }
 
+
   current_mean = fsrSum / fsrWindowCount;
 
-  // Start breathing detection only when window is full
-  if (fsrWindowCount == 5 && previous_mean != 0) {
-    calculateBreathingRate();
+
+
+  // ----- BREATHING ANALYSIS -----
+
+  // Start breathing analysis only when the moving-average window is full
+  if (fsrWindowCount == n_window_fsr) {
+
+    breathing_counter++;
+
+
+    // Evaluate respiratory trend only every 25 samples
+    if (breathing_counter >= 25) {
+
+      // First time: we do not yet have a previous mean for comparison
+      if (previous_breath_mean == 0) {
+
+        previous_breath_mean = current_mean;
+      }
+
+      else {
+
+        // Compare current smoothed FSR with the value about 100 ms ago
+        dFSR = current_mean - previous_breath_mean;
+
+        // Save current value for next comparison
+        previous_breath_mean = current_mean;
+
+        calculateBreathingRate();
+      }
+
+
+      breathing_counter = 0;
+    }
   }
 }
-
 
 
 // =====================================================
@@ -358,11 +399,12 @@ void updateFSR() {
 
 void calculateBreathingRate() {
 
-  dFSR = current_mean - previous_mean;
+  // dFSR has already been calculated in updateFSR()
 
-  // -----------------------------------------
-  // Initial phase identification
-  // -----------------------------------------
+
+  // ==================================================
+  // INITIAL PHASE IDENTIFICATION
+  // ==================================================
 
   if (breathingInitialized == false) {
 
@@ -401,24 +443,30 @@ void calculateBreathingRate() {
 
       count_start_insp++;
 
-        if (count_start_insp >= 3) {     // Require 3 consecutive increasing values
-         int new_in_start = millis();      // store starting time of the new inspiration cycle
+      if (count_start_insp >= 3) {
 
-          if (ex_start != 0) {              // Exhalation duration
+        int new_in_start = millis();
+
+
+        // Duration of previous expiration
+        if (ex_start != 0) {
           Tex = new_in_start - ex_start;
         }
 
 
-        // Full breathing period:  inspiration start --> next inspiration start
-        if (in_start != 0) {                          // at the beginning in_start is zero: used if i have a valid precedent sample
+        // Complete breathing period:
+        // old inspiration start --> new inspiration start
+        if (in_start != 0) {
+
           Tbreath = new_in_start - in_start;
+
           respiratoryRate = 60000.0 / Tbreath;
         }
 
-        in_start = new_in_start;    // in_start --> starting time of the previous inspiration cycle 
-                                     // new_in_start becomes now the starting time of the previous inspiration cycle
-                                      // when the next cycle will begin, its starting time will be stored in "new_in_start" while 
-                                       // in_start will preserve the information about the previous one
+
+        // New inspiration becomes reference for next breath
+        in_start = new_in_start;
+
         inspiration_phase = true;
         expiration_phase = false;
 
@@ -427,9 +475,9 @@ void calculateBreathingRate() {
       }
     }
 
+    else if (dFSR < -eps) {
 
-    // Opposite trend --> candidate was wrong
-      else if (dFSR < -eps) {
+      // Opposite direction: cancel candidate transition
       count_start_insp = 0;
     }
   }
@@ -443,16 +491,19 @@ void calculateBreathingRate() {
   else if (inspiration_phase == true) {
 
     if (dFSR < -eps) {
+
       count_start_exp++;
 
-      // Require 3 consecutive decreasing values
       if (count_start_exp >= 3) {
 
         ex_start = millis();
 
+
+        // Duration of previous inspiration
         if (in_start != 0) {
           Tinsp = ex_start - in_start;
         }
+
 
         inspiration_phase = false;
         expiration_phase = true;
@@ -462,13 +513,13 @@ void calculateBreathingRate() {
       }
     }
 
-    // Opposite trend --> candidate was wrong
-      else if (dFSR > eps) {
+    else if (dFSR > eps) {
+
+      // Opposite direction: cancel candidate transition
       count_start_exp = 0;
     }
   }
 }
-
 
 
 // =====================================================
