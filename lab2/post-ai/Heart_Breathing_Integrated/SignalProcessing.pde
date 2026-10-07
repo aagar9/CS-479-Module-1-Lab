@@ -130,9 +130,15 @@ float fsrGraphH = 220;
 
 void setupSignalProcessing() {
 
-  // Show available serial ports in the Processing console
   println("Available serial ports:");
   printArray(Serial.list());
+
+  // FireBeetle / Arduino connection
+  // Tested in class on Windows using COM3
+  myPort = new Serial(this, "COM3", 115200);
+
+  myPort.clear();
+  myPort.bufferUntil('\n');
 
   frameRate(30);
 }
