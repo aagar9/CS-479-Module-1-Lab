@@ -4,20 +4,18 @@
 // Post-AI Integrated Processing UI
 // ========================================
 
-// 0 = Home
-// 1 = Fitness
-// 2 = Stress
-// 3 = Meditation
+// MODES
+final int MODE_HOME = 0;
+final int MODE_FITNESS = 1;
+final int MODE_STRESS = 2;
+final int MODE_MEDITATION = 3;
 
-int mode = 0;
+int mode = MODE_HOME;
 
 
 // ========================================
 // LIVE SENSOR VALUES
 // ========================================
-
-// Values are calculated in SignalProcessing.pde.
-// The original calculation logic is not changed.
 
 int getHeartRate() {
   return BPM;
@@ -57,21 +55,25 @@ void draw() {
   background(255);
 
   drawHeader();
-  drawButtons();
+  drawNavigation();
 
-  if (mode == 0) {
+  if (mode == MODE_HOME) {
+
     drawHome();
   }
 
-  else if (mode == 1) {
+  else if (mode == MODE_FITNESS) {
+
     drawFitness();
   }
 
-  else if (mode == 2) {
+  else if (mode == MODE_STRESS) {
+
     drawStress();
   }
 
-  else if (mode == 3) {
+  else if (mode == MODE_MEDITATION) {
+
     drawMeditation();
   }
 }
@@ -84,46 +86,150 @@ void draw() {
 void drawHeader() {
 
   fill(0);
-
   textSize(30);
 
   text(
     "Heart + Breathing Monitor",
     30,
-    45
+    42
   );
 }
 
 
 // ========================================
-// MODE BUTTONS
+// NAVIGATION
 // ========================================
 
-void drawButtons() {
+void drawNavigation() {
 
   stroke(0);
 
-  // Fitness button
-  fill(220);
-  rect(30, 70, 150, 50);
 
-  // Stress button
-  fill(220);
-  rect(200, 70, 150, 50);
+  // HOME
 
-  // Meditation button
-  fill(220);
-  rect(370, 70, 150, 50);
+  if (mode == MODE_HOME) {
+    fill(180);
+  }
+  else {
+    fill(220);
+  }
+
+  rect(
+    30,
+    65,
+    120,
+    50
+  );
+
+
+  // FITNESS
+
+  if (mode == MODE_FITNESS) {
+    fill(180);
+  }
+  else {
+    fill(220);
+  }
+
+  rect(
+    165,
+    65,
+    150,
+    50
+  );
+
+
+  // STRESS
+
+  if (mode == MODE_STRESS) {
+    fill(180);
+  }
+  else {
+    fill(220);
+  }
+
+  rect(
+    330,
+    65,
+    150,
+    50
+  );
+
+
+  // MEDITATION
+
+  if (mode == MODE_MEDITATION) {
+    fill(180);
+  }
+  else {
+    fill(220);
+  }
+
+  rect(
+    495,
+    65,
+    170,
+    50
+  );
 
 
   fill(0);
+
   textSize(16);
 
-  text("FITNESS", 65, 100);
+  text(
+    "HOME",
+    67,
+    96
+  );
 
-  text("STRESS", 245, 100);
+  text(
+    "FITNESS",
+    205,
+    96
+  );
 
-  text("MEDITATION", 390, 100);
+  text(
+    "STRESS",
+    375,
+    96
+  );
+
+  text(
+    "MEDITATION",
+    525,
+    96
+  );
+
+
+  // --------------------------------------
+  // Sensor status
+  // --------------------------------------
+
+  textSize(13);
+
+
+  if (leadsOff) {
+
+    fill(255, 0, 0);
+
+    text(
+      "ECG LEADS OFF",
+      790,
+      95
+    );
+  }
+
+  else {
+
+    fill(0, 150, 0);
+
+    text(
+      "SENSOR ACTIVE",
+      790,
+      95
+    );
+  }
 }
 
 
@@ -135,260 +241,164 @@ void drawHome() {
 
   fill(0);
 
-  textSize(24);
+  textSize(26);
 
   text(
-    "Select a mode",
+    "Live Sensor Monitor",
     30,
-    180
-  );
-
-
-  textSize(18);
-
-  text(
-    "Heart Rate: " + getHeartRate() + " BPM",
-    30,
-    240
-  );
-
-  text(
-    "Respiratory Rate: "
-    + nf(getRespRate(), 0, 1)
-    + " breaths/min",
-    30,
-    280
-  );
-
-
-  // Signal status
-
-  textSize(14);
-
-  if (leadsOff == true) {
-
-    fill(255, 0, 0);
-
-    text(
-      "ECG electrodes disconnected",
-      30,
-      330
-    );
-  }
-
-  else {
-
-    fill(0);
-
-    text(
-      "Waiting for / receiving sensor data",
-      30,
-      330
-    );
-  }
-}
-
-
-// ========================================
-// FITNESS MODE
-// ========================================
-
-void drawFitness() {
-
-  fill(0);
-
-  textSize(24);
-
-  text(
-    "FITNESS MODE",
-    30,
-    170
+    175
   );
 
 
   textSize(20);
 
   text(
-    "Heart Rate: "
-    + getHeartRate()
+    "Heart Rate:",
+    30,
+    235
+  );
+
+
+  textSize(32);
+
+  text(
+    getHeartRate()
     + " BPM",
-    30,
-    220
+    175,
+    235
   );
 
+
+  textSize(20);
+
   text(
-    "Resp Rate: "
-    + nf(getRespRate(), 0, 1)
+    "Respiratory Rate:",
+    30,
+    290
+  );
+
+
+  textSize(32);
+
+  text(
+    nf(
+      getRespRate(),
+      0,
+      1
+    )
     + " breaths/min",
-    30,
-    255
+    220,
+    290
   );
 
 
-  // Cardio-zone calculation will be
-  // connected in the next stage.
+  textSize(18);
 
   text(
-    "Cardio Zone: --",
+    "Inhale: "
+    + nf(
+      getInhaleTime(),
+      0,
+      2
+    )
+    + " sec",
     30,
-    300
+    345
   );
 
 
-  // --------------------------------
+  text(
+    "Exhale: "
+    + nf(
+      getExhaleTime(),
+      0,
+      2
+    )
+    + " sec",
+    250,
+    345
+  );
+
+
+  // =====================================
   // ECG GRAPH
-  // --------------------------------
+  // =====================================
 
   stroke(0);
   noFill();
 
   rect(
     30,
-    340,
-    600,
-    100
+    390,
+    440,
+    180
   );
 
 
   fill(0);
-  textSize(16);
+  textSize(14);
 
   text(
     "ECG",
     40,
-    365
+    410
   );
 
-
-  // Plot real ECG data from
-  // SignalProcessing.pde
 
   if (ecgPlot.size() > 1) {
 
     stroke(255, 0, 0);
-
     noFill();
 
     beginShape();
 
-    for (int i = 0; i < ecgPlot.size(); i++) {
+
+    for (
+      int i = 0;
+      i < ecgPlot.size();
+      i++
+    ) {
 
       float x =
         map(
           i,
           0,
           maxPlotPoints - 1,
-          50,
-          610
+          45,
+          455
         );
+
 
       float y =
         map(
           ecgPlot.get(i),
           0,
           1023,
-          425,
-          375
+          555,
+          420
         );
+
 
       vertex(x, y);
     }
+
 
     endShape();
   }
 
 
-  // --------------------------------
-  // CARDIO ZONE GRAPH
-  // --------------------------------
+  // =====================================
+  // RESPIRATION GRAPH
+  // =====================================
 
   stroke(0);
   noFill();
 
   rect(
-    30,
-    470,
-    600,
-    70
-  );
-
-
-  fill(0);
-
-  text(
-    "CARDIO ZONE",
-    40,
-    495
-  );
-
-
-  // Very light
-  fill(180);
-
-  rect(
-    50,
-    510,
-    100,
-    15
-  );
-
-
-  // Light
-  fill(100, 180, 255);
-
-  rect(
-    150,
-    510,
-    100,
-    15
-  );
-
-
-  // Moderate
-  fill(0, 200, 0);
-
-  rect(
-    250,
-    510,
-    100,
-    15
-  );
-
-
-  // Hard
-  fill(255, 150, 0);
-
-  rect(
-    350,
-    510,
-    100,
-    15
-  );
-
-
-  // Maximum
-  fill(255, 0, 0);
-
-  rect(
-    450,
-    510,
-    100,
-    15
-  );
-
-
-  // --------------------------------
-  // RESPIRATORY GRAPH
-  // --------------------------------
-
-  stroke(0);
-  noFill();
-
-  rect(
-    30,
-    570,
-    600,
-    90
+    500,
+    390,
+    440,
+    180
   );
 
 
@@ -396,44 +406,48 @@ void drawFitness() {
 
   text(
     "RESPIRATION",
-    40,
-    595
+    510,
+    410
   );
 
-
-  // Plot real FSR data from
-  // SignalProcessing.pde
 
   if (fsrPlot.size() > 1) {
 
     stroke(0, 0, 255);
-
     noFill();
 
     beginShape();
 
-    for (int i = 0; i < fsrPlot.size(); i++) {
+
+    for (
+      int i = 0;
+      i < fsrPlot.size();
+      i++
+    ) {
 
       float x =
         map(
           i,
           0,
           maxPlotPoints - 1,
-          50,
-          610
+          515,
+          925
         );
+
 
       float y =
         map(
           fsrPlot.get(i),
           0,
           1023,
-          650,
-          605
+          555,
+          420
         );
+
 
       vertex(x, y);
     }
+
 
     endShape();
   }
@@ -444,194 +458,108 @@ void drawFitness() {
 
 
 // ========================================
-// STRESS MODE
-// ========================================
-
-void drawStress() {
-
-  fill(0);
-
-  textSize(24);
-
-  text(
-    "STRESS MONITORING MODE",
-    30,
-    170
-  );
-
-
-  textSize(20);
-
-
-  // Baseline will be calculated during
-  // the 30-second baseline stage.
-
-  text(
-    "Baseline Heart Rate: -- BPM",
-    30,
-    230
-  );
-
-
-  text(
-    "Current Heart Rate: "
-    + getHeartRate()
-    + " BPM",
-    30,
-    270
-  );
-
-
-  text(
-    "Baseline Resp Rate: -- breaths/min",
-    30,
-    320
-  );
-
-
-  text(
-    "Current Resp Rate: "
-    + nf(getRespRate(), 0, 1)
-    + " breaths/min",
-    30,
-    360
-  );
-
-
-  textSize(28);
-
-  fill(0);
-
-  // Stress classification will be
-  // implemented after baseline collection.
-
-  text(
-    "STRESS STATE: --",
-    30,
-    430
-  );
-}
-
-
-// ========================================
-// MEDITATION MODE
-// ========================================
-
-void drawMeditation() {
-
-  fill(0);
-
-  textSize(24);
-
-  text(
-    "MEDITATION MODE",
-    30,
-    170
-  );
-
-
-  textSize(20);
-
-
-  text(
-    "Heart Rate: "
-    + getHeartRate()
-    + " BPM",
-    30,
-    230
-  );
-
-
-  text(
-    "Resp Rate: "
-    + nf(getRespRate(), 0, 1)
-    + " breaths/min",
-    30,
-    270
-  );
-
-
-  text(
-    "Inhale: "
-    + nf(getInhaleTime(), 0, 2)
-    + " sec",
-    30,
-    330
-  );
-
-
-  text(
-    "Exhale: "
-    + nf(getExhaleTime(), 0, 2)
-    + " sec",
-    30,
-    370
-  );
-
-
-  text(
-    "Target: Exhale = 3 x Inhale",
-    30,
-    430
-  );
-
-
-  fill(0);
-
-  textSize(28);
-
-  // Three-breath meditation feedback
-  // will be implemented in the next stage.
-
-  text(
-    "BREATHING: --",
-    30,
-    500
-  );
-}
-
-
-// ========================================
-// MOUSE CLICKS
+// MOUSE INPUT
 // ========================================
 
 void mousePressed() {
 
-  // FITNESS BUTTON
+  // --------------------------------------
+  // HOME
+  // --------------------------------------
 
   if (
-    mouseX > 30 &&
-    mouseX < 180 &&
-    mouseY > 70 &&
-    mouseY < 120
+    mouseX >= 30 &&
+    mouseX <= 150 &&
+    mouseY >= 65 &&
+    mouseY <= 115
   ) {
 
-    mode = 1;
+    mode = MODE_HOME;
+
+    return;
   }
 
 
-  // STRESS BUTTON
+  // --------------------------------------
+  // FITNESS
+  // --------------------------------------
 
   if (
-    mouseX > 200 &&
-    mouseX < 350 &&
-    mouseY > 70 &&
-    mouseY < 120
+    mouseX >= 165 &&
+    mouseX <= 315 &&
+    mouseY >= 65 &&
+    mouseY <= 115
   ) {
 
-    mode = 2;
+    mode = MODE_FITNESS;
+
+    return;
   }
 
 
-  // MEDITATION BUTTON
+  // --------------------------------------
+  // STRESS
+  // --------------------------------------
 
   if (
-    mouseX > 370 &&
-    mouseX < 520 &&
-    mouseY > 70 &&
-    mouseY < 120
+    mouseX >= 330 &&
+    mouseX <= 480 &&
+    mouseY >= 65 &&
+    mouseY <= 115
   ) {
 
-    mode = 3;
+    mode = MODE_STRESS;
+
+    return;
+  }
+
+
+  // --------------------------------------
+  // MEDITATION
+  // --------------------------------------
+
+  if (
+    mouseX >= 495 &&
+    mouseX <= 665 &&
+    mouseY >= 65 &&
+    mouseY <= 115
+  ) {
+
+    mode = MODE_MEDITATION;
+
+    return;
+  }
+
+
+  // --------------------------------------
+  // MODE-SPECIFIC BUTTONS
+  // --------------------------------------
+
+  if (mode == MODE_FITNESS) {
+
+    fitnessMousePressed();
+  }
+
+  else if (mode == MODE_STRESS) {
+
+    stressMousePressed();
+  }
+
+  else if (mode == MODE_MEDITATION) {
+
+    meditationMousePressed();
+  }
+}
+
+
+// ========================================
+// KEYBOARD INPUT
+// ========================================
+
+void keyPressed() {
+
+  if (mode == MODE_FITNESS) {
+
+    fitnessKeyPressed();
   }
 }
