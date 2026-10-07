@@ -1839,96 +1839,69 @@ String fitnessAnimationLabel() {
 // ========================================
 
 void drawFitnessZoneBar() {
+  // Reference palette: Very Light gray, Light blue,
+  // Moderate green, Hard orange, Maximum red.
+  // Each section occupies 95 px, matching the original dashboard.
+  int[] zoneColors = {
+    color(155, 155, 155),  // Very Light (50-60%)
+    color(61, 157, 219),   // Light (60-70%)
+    color(42, 157, 91),    // Moderate (70-80%)
+    color(241, 169, 43),   // Hard (80-90%)
+    color(215, 42, 61)     // Maximum (90-100%)
+  };
 
+  String[] zoneLabels = {
+    "VERY LIGHT", "LIGHT", "MODERATE", "HARD", "MAXIMUM"
+  };
+  String[] zoneRanges = {
+    "50-60%", "60-70%", "70-80%", "80-90%", "90-100%"
+  };
+
+  float left = 50;
+  float top = 399;
+  float segmentWidth = 95;
+  float barHeight = 25;
+
+  textAlign(CENTER, CENTER);
+  textSize(10);
   noStroke();
 
-
-  // Very Light
-
-  fill(100, 180, 255);
-
-  rect(
-    50,
-    410,
-    95,
-    20
-  );
-
-
-  // Light
-
-  fill(0, 200, 0);
-
-  rect(
-    145,
-    410,
-    95,
-    20
-  );
-
-
-  // Moderate
-
-  fill(255, 220, 0);
-
-  rect(
-    240,
-    410,
-    95,
-    20
-  );
-
-
-  // Hard
-
-  fill(255, 150, 0);
-
-  rect(
-    335,
-    410,
-    95,
-    20
-  );
-
-
-  // Maximum
-
-  fill(255, 0, 0);
-
-  rect(
-    430,
-    410,
-    95,
-    20
-  );
-
-
-  // Current zone indicator
-
-  if (
-    fitnessCurrentZone >=
-    ZONE_VERY_LIGHT
-  ) {
-
-    float markerX =
-      97.5 +
-      (
-        fitnessCurrentZone -
-        ZONE_VERY_LIGHT
-      ) * 95;
-
-
-    fill(0);
-
-    triangle(
-      markerX - 7,
-      442,
-      markerX + 7,
-      442,
-      markerX,
-      430
-    );
+  for (int i = 0; i < 5; i++) {
+    float x = left + i * segmentWidth;
+    fill(zoneColors[i]);
+    rect(x, top, segmentWidth, barHeight);
+    fill(255);
+    text(zoneLabels[i], x + segmentWidth / 2, top + 7);
+    text(zoneRanges[i], x + segmentWidth / 2, top + 18);
   }
+
+  // Move the marker within its zone using the live heart-rate
+  // percentage, rather than snapping to the center of a zone.
+  if (fitnessCurrentZone >= ZONE_VERY_LIGHT && fitnessMaxHR > 0) {
+    float percent = 100.0 * getHeartRate() / fitnessMaxHR;
+    float markerX = map(constrain(percent, 50, 100),
+                        50, 100, left, left + 5 * segmentWidth);
+    markerX = constrain(markerX, left + 3, left + 5 * segmentWidth - 3);
+
+    // White outline makes the colored pointer visible on every band.
+    stroke(255);
+    strokeWeight(2);
+    fill(zoneColors[fitnessCurrentZone - ZONE_VERY_LIGHT]);
+    triangle(markerX - 8, top + barHeight + 12,
+             markerX + 8, top + barHeight + 12,
+             markerX, top + barHeight + 1);
+    strokeWeight(1);
+    noStroke();
+  } else {
+    fill(90);
+    textSize(10);
+    text("Below 50% max HR", left + 5 * segmentWidth / 2,
+         top + barHeight + 10);
+  }
+
+  // Restore default text alignment for other Fitness UI elements.
+  textAlign(LEFT, BASELINE);
+  stroke(0);
 }
 
 
