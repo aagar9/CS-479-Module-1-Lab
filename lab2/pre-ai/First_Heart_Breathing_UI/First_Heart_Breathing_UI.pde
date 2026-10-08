@@ -20,12 +20,16 @@ String[] zones = {"VERY LIGHT", "LIGHT", "MODERATE", "HARD", "MAXIMUM"};
 
 void setup() {
   size(1000, 700);
-  setupPreAILiveData();
+  setupSignalProcessing();
   textFont(createFont("Arial", 15));
 }
 void draw() {
+  heartRate = BPM;
+  respRate = respiratoryRate;
+  inhaleTime = Tinsp / 1000.0;
+  exhaleTime = Tex / 1000.0;
   background(250);
-  fill(0); textSize(27); text("Heart + Breathing Monitor (Pre-AI)", 25, 42);
+  fill(0); textSize(27); text("Heart + Breathing Monitor", 25, 42);
   navButton(25, 65, "HOME", 0);
   navButton(170, 65, "FITNESS", 1);
   navButton(315, 65, "STRESS", 2);
