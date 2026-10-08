@@ -1507,238 +1507,91 @@ float y =
 // FITNESS ANIMATION
 // ========================================
 
-void drawFitnessAnimation(
-  float centerX,
-  float centerY
-) {
-
-  float speed =
-    getFitnessAnimationSpeed();
-
-
-  fitnessAnimationPhase += speed;
-
-
-  float movement =
-    sin(fitnessAnimationPhase);
-
-
-  float armSwing =
-    movement * 20;
-
-  float legSwing =
-    movement * 18;
-
-
-  // Lower zones have less movement.
-
-  if (
-    fitnessCurrentZone ==
-    ZONE_BELOW
-  ) {
-
-    armSwing *= 0.20;
-    legSwing *= 0.20;
-  }
-
-
-  else if (
-    fitnessCurrentZone ==
-    ZONE_VERY_LIGHT
-  ) {
-
-    armSwing *= 0.40;
-    legSwing *= 0.40;
-  }
-
-
-  else if (
-    fitnessCurrentZone ==
-    ZONE_LIGHT
-  ) {
-
-    armSwing *= 0.65;
-    legSwing *= 0.65;
-  }
-
-
-  // --------------------------------------
-  // Animation box
-  // --------------------------------------
+void drawFitnessAnimation(float centerX, float centerY) {
+  fitnessAnimationPhase += getFitnessAnimationSpeed();
+  float p = fitnessAnimationPhase;
+  float stride = sin(p);
+  float alternate = sin(p + PI);
+  float intensity = 0.35 + 0.15 * max(0, fitnessCurrentZone);
+  int activity = fitnessSelectedActivity;
 
   stroke(0);
   strokeWeight(1);
   noFill();
+  rect(centerX - 145, centerY - 70, 290, 145);
 
-  rect(
-    centerX - 145,
-    centerY - 70,
-    290,
-    145
-  );
-
-
-  // --------------------------------------
-  // Speed lines
-  // --------------------------------------
-
-  if (
-    fitnessCurrentZone >=
-    ZONE_HARD
-  ) {
-
-    strokeWeight(2);
-
-    line(
-      centerX - 110,
-      centerY - 25,
-      centerX - 65,
-      centerY - 25
-    );
-
-    line(
-      centerX - 120,
-      centerY,
-      centerX - 65,
-      centerY
-    );
-
-    line(
-      centerX - 110,
-      centerY + 25,
-      centerX - 65,
-      centerY + 25
-    );
-  }
-
-
-  if (
-    fitnessCurrentZone ==
-    ZONE_MAXIMUM
-  ) {
-
-    line(
-      centerX - 130,
-      centerY - 42,
-      centerX - 70,
-      centerY - 42
-    );
-
-    line(
-      centerX - 135,
-      centerY + 42,
-      centerX - 70,
-      centerY + 42
-    );
-  }
-
-
-  // --------------------------------------
-  // Stick figure
-  // --------------------------------------
-
-  stroke(0);
+  pushMatrix();
+  translate(centerX, centerY);
+  stroke(25);
   strokeWeight(4);
   noFill();
 
-
-  // Head
-
-  ellipse(
-    centerX,
-    centerY - 35,
-    25,
-    25
-  );
-
-
-  // Body
-
-  line(
-    centerX,
-    centerY - 22,
-    centerX,
-    centerY + 18
-  );
-
-
-  // Left arm
-
-  line(
-    centerX,
-    centerY - 12,
-    centerX - 27,
-    centerY + armSwing
-  );
-
-
-  // Right arm
-
-  line(
-    centerX,
-    centerY - 12,
-    centerX + 27,
-    centerY - armSwing
-  );
-
-
-  // Left leg
-
-  line(
-    centerX,
-    centerY + 18,
-    centerX - 24,
-    centerY + 48 + legSwing
-  );
-
-
-  // Right leg
-
-  line(
-    centerX,
-    centerY + 18,
-    centerX + 24,
-    centerY + 48 - legSwing
-  );
-
-
-  strokeWeight(1);
-
-
-  // --------------------------------------
-  // Labels
-  // --------------------------------------
-
-  fill(0);
-
-  textAlign(CENTER);
-
-  textSize(14);
-
-
-  if (
-    fitnessSelectedActivity >= 0
-  ) {
-
-    text(
-      fitnessActivities[
-        fitnessSelectedActivity
-      ],
-      centerX,
-      centerY + 95
-    );
+  if (activity == 2) {  // CYCLING: pedal around two wheels
+    float crank = p * 1.5;
+    strokeWeight(2);
+    ellipse(-65, 40, 55, 55);
+    ellipse(65, 40, 55, 55);
+    line(-65, 40, -22, 0);
+    line(-22, 0, 0, 40);
+    line(0, 40, -65, 40);
+    line(-22, 0, 65, 40);
+    line(-22, 0, 8, -5);
+    line(8, -5, 28, -5);
+    strokeWeight(4);
+    ellipse(-10, -43, 22, 22);
+    line(-7, -32, -22, -4);
+    line(-22, -4, 8, -5);
+    line(-22, -4, -40, 7);
+    line(-22, -4, 0, 40);
+    line(0, 40, 13 * cos(crank), 40 + 13 * sin(crank));
+    line(0, 40, -13 * cos(crank), 40 - 13 * sin(crank));
+  } else if (activity == 3) {  // STAIRS: alternating step heights
+    strokeWeight(2);
+    line(-125, 60, -65, 60);
+    line(-65, 60, -65, 38);
+    line(-65, 38, -5, 38);
+    line(-5, 38, -5, 16);
+    line(-5, 16, 55, 16);
+    line(55, 16, 55, -6);
+    line(55, -6, 120, -6);
+    strokeWeight(4);
+    float lift = 15 * abs(stride) * intensity;
+    ellipse(0, -42 - lift, 23, 23);
+    line(0, -30 - lift, 0, 9 - lift);
+    line(0, -18 - lift, -24, 2 - lift + 7 * stride);
+    line(0, -18 - lift, 24, 2 - lift - 7 * stride);
+    line(0, 9 - lift, -25, 42 - lift - 15 * stride);
+    line(0, 9 - lift, 25, 42 - lift + 15 * stride);
+  } else {  // WALKING, RUNNING, OTHER
+    float amplitude = (activity == 1 ? 33 : activity == 4 ? 18 : 23) * intensity;
+    float bounce = (activity == 1 ? 11 : activity == 4 ? 7 : 3) * abs(stride) * intensity;
+    float arm = amplitude * stride;
+    float leg = amplitude * stride;
+    ellipse(0, -35 - bounce, 25, 25);
+    line(0, -22 - bounce, 0, 18 - bounce);
+    if (activity == 4) {  // OTHER: jumping-jack style exercise
+      float spread = 12 + 16 * abs(stride) * intensity;
+      line(0, -12 - bounce, -spread, -30 - bounce);
+      line(0, -12 - bounce, spread, -30 - bounce);
+      line(0, 18 - bounce, -spread, 49 - bounce);
+      line(0, 18 - bounce, spread, 49 - bounce);
+    } else {
+      line(0, -12 - bounce, -27, 10 - bounce + arm);
+      line(0, -12 - bounce, 27, 10 - bounce - arm);
+      line(0, 18 - bounce, -24 - leg, 48 - bounce);
+      line(0, 18 - bounce, 24 + leg, 48 - bounce);
+    }
   }
-
-
+  popMatrix();
+  strokeWeight(1);
+  fill(0);
+  textAlign(CENTER);
+  textSize(14);
+  if (activity >= 0 && activity < fitnessActivities.length) {
+    text(fitnessActivities[activity], centerX, centerY + 95);
+  }
   textSize(13);
-
-  text(
-    fitnessAnimationLabel(),
-    centerX,
-    centerY + 115
-  );
-
-
+  text(fitnessAnimationLabel(), centerX, centerY + 115);
   textAlign(LEFT);
 }
 
