@@ -632,10 +632,10 @@ void drawMeditationDashboard() {
   textSize(14);
 
   text(
-    "Consecutive breaths outside target: "
+    "Missed breaths in a row: "
     + meditationFailedBreaths,
-    680,
-    285
+    500,
+    302
   );
 
 

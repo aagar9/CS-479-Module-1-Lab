@@ -388,7 +388,7 @@ void updateStressClassification() {
   }
 
 
-  // Require both HR and RR to be elevated.
+  // Either HR or RR can indicate elevated stress.
   //
   // This is deliberately isolated from
   // SignalProcessing.pde so it can be tuned
@@ -397,7 +397,7 @@ void updateStressClassification() {
   if (
     stressHRChange
     >= STRESS_HR_INCREASE_PERCENT
-    &&
+    ||
     stressRRChange
     >= STRESS_RR_INCREASE_PERCENT
   ) {
