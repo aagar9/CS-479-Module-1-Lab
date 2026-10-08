@@ -543,7 +543,24 @@ void drawStressDashboard() {
   );
 
 
-  if (ecgPlot.size() > 1) {
+  float ecgDisplayMin = Float.MAX_VALUE;
+    float ecgDisplayMax = -Float.MAX_VALUE;
+
+    for (int j = 0; j < ecgPlot.size(); j++) {
+      float value = ecgPlot.get(j);
+      ecgDisplayMin = min(ecgDisplayMin, value);
+      ecgDisplayMax = max(ecgDisplayMax, value);
+    }
+
+    float ecgPadding = max(
+      10,
+      (ecgDisplayMax - ecgDisplayMin) * 0.15
+    );
+
+    ecgDisplayMin -= ecgPadding;
+    ecgDisplayMax += ecgPadding;
+
+    if (ecgPlot.size() > 1) {
 
     stroke(255, 0, 0);
 
@@ -568,14 +585,16 @@ void drawStressDashboard() {
         );
 
 
-      float y =
+float y =
         map(
           ecgPlot.get(i),
-          0,
-          1023,
+          ecgDisplayMin,
+          ecgDisplayMax,
           405,
           325
         );
+
+      y = constrain(y, 325, 405);
 
 
       vertex(x, y);

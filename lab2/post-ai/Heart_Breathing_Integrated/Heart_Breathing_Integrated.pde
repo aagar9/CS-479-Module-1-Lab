@@ -372,11 +372,14 @@ void drawHome() {
       float y =
         map(
           ecgPlot.get(i),
-          0,
-          1023,
-          555,
-          420
+          -512,
+          512,
+          550,
+          425
         );
+
+      // Keep ECG spikes inside the graph box.
+      y = constrain(y, 425, 550);
 
 
       vertex(x, y);
