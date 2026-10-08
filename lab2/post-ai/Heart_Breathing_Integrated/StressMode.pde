@@ -13,6 +13,7 @@ final int STRESS_SAMPLE_MS = 1000;
 
 int stressState = STRESS_REST;
 boolean stressStarted = false;
+boolean stressAwaitingStart = true;
 int stressPhaseStart = 0;
 int stressLastSample = 0;
 float stressHRSum = 0;
@@ -35,11 +36,11 @@ String stressMessage = "";
 void drawStress() {
   if (!stressStarted) {
     stressStarted = true;
-    beginStressPhase(STRESS_REST);
+    prepareStressPhase(STRESS_REST);
   }
 
   if (stressState <= STRESS_CALM) {
-    updateStressCalibration();
+    if (!stressAwaitingStart) updateStressCalibration();
     drawStressCalibration();
   } else if (stressState == STRESS_READY) {
     drawStressReady();
@@ -49,8 +50,21 @@ void drawStress() {
   }
 }
 
-void beginStressPhase(int phase) {
+void prepareStressPhase(int phase) {
   stressState = phase;
+  stressAwaitingStart = true;
+  stressPhaseStart = 0;
+  stressLastSample = 0;
+  stressHRSum = 0;
+  stressRRSum = 0;
+  stressHRCount = 0;
+  stressRRCount = 0;
+  stressMessage = "";
+}
+
+void beginStressPhase() {
+  if (stressState > STRESS_CALM) return;
+  stressAwaitingStart = false;
   stressPhaseStart = millis();
   stressLastSample = 0;
   stressHRSum = 0;
@@ -86,7 +100,7 @@ void updateStressCalibration() {
     stressCountsHR[stressState] = stressHRCount;
     stressCountsRR[stressState] = stressRRCount;
     if (stressState < STRESS_CALM) {
-      beginStressPhase(stressState + 1);
+      prepareStressPhase(stressState + 1);
     } else {
       finishStressCalibration();
     }
@@ -114,9 +128,11 @@ void drawStressCalibration() {
                        "Stop the task and calm down.";
   text(instruction, 30, 215);
   text("Stage " + (stressState + 1) + " of 3", 30, 255);
-  float remaining = max(0, (STRESS_CALIBRATION_MS - (millis() - stressPhaseStart)) / 1000.0);
-  textSize(30);
-  text(nf(remaining, 0, 1) + " seconds remaining", 30, 305);
+  float remaining = stressAwaitingStart ? 30.0 :
+    max(0, (STRESS_CALIBRATION_MS - (millis() - stressPhaseStart)) / 1000.0);
+  textSize(26);
+  text(stressAwaitingStart ? "Ready to acquire 30-second measurement" :
+    nf(remaining, 0, 1) + " seconds remaining", 30, 305);
   textSize(18);
   text("Current HR: " + getHeartRate() + " BPM", 30, 350);
   text("Current RR: " + nf(getRespRate(), 0, 1) + " breaths/min", 30, 385);
@@ -129,6 +145,19 @@ void drawStressCalibration() {
   fill(160, 0, 0);
   textSize(15);
   text(stressMessage, 30, 490);
+  if (stressAwaitingStart) {
+    fill(0, 145, 0);
+    noStroke();
+    rect(30, 525, 310, 55);
+    fill(255);
+    textSize(17);
+    text("START 30-SECOND ACQUISITION", 42, 560);
+    stroke(0);
+  } else {
+    fill(0);
+    textSize(15);
+    text("Acquiring measurements...", 30, 550);
+  }
 }
 
 void drawStressReady() {
@@ -232,11 +261,18 @@ void drawStressDashboard() {
 }
 
 void stressMousePressed() {
+  if (stressState <= STRESS_CALM && stressAwaitingStart) {
+    if (mouseX >= 30 && mouseX <= 340 &&
+        mouseY >= 525 && mouseY <= 580) {
+      beginStressPhase();
+    }
+    return;
+  }
   if (stressState == STRESS_READY && mouseY >= 455 && mouseY <= 510) {
     if (mouseX >= 30 && mouseX <= 295 && (stressHRUsable || stressRRUsable)) {
       startStressMonitoring();
     } else if (mouseX >= 315 && mouseX <= 535) {
-      beginStressPhase(STRESS_REST);
+      prepareStressPhase(STRESS_REST);
     }
   }
 }
