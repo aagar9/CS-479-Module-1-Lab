@@ -17,11 +17,11 @@ int mode = 0;
 // Later this will come from the FireBeetle
 // ----------------------------------------
 
-int heartRate = 72;
-int respRate = 14;
+int heartRate = 0;
+float respRate = 0;
 
-float inhaleTime = 1.5;
-float exhaleTime = 4.5;
+float inhaleTime = 0;
+float exhaleTime = 0;
 
 
 // ========================================
@@ -31,6 +31,7 @@ float exhaleTime = 4.5;
 void setup() {
 
   size(1000, 700);
+  setupPreAILiveData();
 
 }
 
@@ -45,6 +46,7 @@ void draw() {
 
   drawHeader();
   drawButtons();
+  drawPreAIConnectionStatus();
 
   if (mode == 0) {
     drawHome();
@@ -190,27 +192,7 @@ void drawFitness() {
   text("ECG", 40, 365);
 
 
-  // Fake ECG waveform
-
-  stroke(255, 0, 0);
-
-  for (int x = 50; x < 600; x += 60) {
-
-    line(x, 400,
-         x + 15, 400);
-
-    line(x + 15, 400,
-         x + 20, 370);
-
-    line(x + 20, 370,
-         x + 25, 420);
-
-    line(x + 25, 420,
-         x + 30, 400);
-
-    line(x + 30, 400,
-         x + 60, 400);
-  }
+  drawLivePreAIWaveform(ecgPreAI, 50, 375, 610, 430, color(255, 0, 0));
 
 
   // --------------------------------
@@ -276,23 +258,7 @@ void drawFitness() {
   );
 
 
-  // Fake breathing waveform
-
-  stroke(0, 0, 255);
-
-  noFill();
-
-  beginShape();
-
-  for (int x = 50; x < 610; x++) {
-
-    float y =
-      625 + sin(x * 0.05) * 20;
-
-    vertex(x, y);
-  }
-
-  endShape();
+  drawLivePreAIWaveform(fsrPreAI, 50, 605, 610, 650, color(0, 0, 255));
 
   stroke(0);
 }
@@ -318,26 +284,26 @@ void drawStress() {
   textSize(20);
 
   text(
-    "Baseline Heart Rate: 72 BPM",
+    "Heart Rate: " + heartRate + " BPM",
     30,
     230
   );
 
   text(
-    "Current Heart Rate: 91 BPM",
+    "Live Heart Rate: " + heartRate + " BPM",
     30,
     270
   );
 
 
   text(
-    "Baseline Resp Rate: 14 breaths/min",
+    "Resp Rate: " + nf(respRate, 0, 1) + " breaths/min",
     30,
     320
   );
 
   text(
-    "Current Resp Rate: 20 breaths/min",
+    "Live Resp Rate: " + nf(respRate, 0, 1) + " breaths/min",
     30,
     360
   );
@@ -348,7 +314,7 @@ void drawStress() {
   fill(255, 0, 0);
 
   text(
-    "STRESS STATE: STRESSED",
+    "STRESS STATE: NOT CALIBRATED",
     30,
     430
   );
@@ -375,13 +341,13 @@ void drawMeditation() {
   textSize(20);
 
   text(
-    "Heart Rate: 68 BPM",
+    "Heart Rate: " + heartRate + " BPM",
     30,
     230
   );
 
   text(
-    "Resp Rate: 10 breaths/min",
+    "Resp Rate: " + nf(respRate, 0, 1) + " breaths/min",
     30,
     270
   );
@@ -412,7 +378,7 @@ void drawMeditation() {
   textSize(28);
 
   text(
-    "BREATHING: GOOD",
+    "BREATHING: LIVE DATA",
     30,
     500
   );
