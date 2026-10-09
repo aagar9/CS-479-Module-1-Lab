@@ -1507,94 +1507,112 @@ float y =
 // FITNESS ANIMATION
 // ========================================
 
+// Activity animations: feet are grounded and the staircase figure climbs.
 void drawFitnessAnimation(float centerX, float centerY) {
   fitnessAnimationPhase += getFitnessAnimationSpeed();
-  float p = fitnessAnimationPhase;
-  float stride = sin(p);
-  float alternate = sin(p + PI);
-  float intensity = 0.35 + 0.15 * max(0, fitnessCurrentZone);
+  float phase = fitnessAnimationPhase;
   int activity = fitnessSelectedActivity;
-
-  stroke(0);
-  strokeWeight(1);
-  noFill();
-  rect(centerX - 145, centerY - 70, 290, 145);
-
+  pushStyle();
+  noStroke(); fill(239, 246, 255);
+  rect(centerX-145, centerY-70, 290, 145, 14);
+  stroke(209, 224, 243); noFill();
+  rect(centerX-145, centerY-70, 290, 145, 14);
   pushMatrix();
   translate(centerX, centerY);
-  stroke(25);
-  strokeWeight(4);
-  noFill();
-
-  if (activity == 2) {  // CYCLING: pedal around two wheels
-    float crank = p * 1.5;
-    strokeWeight(2);
-    ellipse(-65, 40, 55, 55);
-    ellipse(65, 40, 55, 55);
-    line(-65, 40, -22, 0);
-    line(-22, 0, 0, 40);
-    line(0, 40, -65, 40);
-    line(-22, 0, 65, 40);
-    line(-22, 0, 8, -5);
-    line(8, -5, 28, -5);
-    strokeWeight(4);
-    ellipse(-10, -43, 22, 22);
-    line(-7, -32, -22, -4);
-    line(-22, -4, 8, -5);
-    line(-22, -4, -40, 7);
-    line(-22, -4, 0, 40);
-    line(0, 40, 13 * cos(crank), 40 + 13 * sin(crank));
-    line(0, 40, -13 * cos(crank), 40 - 13 * sin(crank));
-  } else if (activity == 3) {  // STAIRS: alternating step heights
-    strokeWeight(2);
-    line(-125, 60, -65, 60);
-    line(-65, 60, -65, 38);
-    line(-65, 38, -5, 38);
-    line(-5, 38, -5, 16);
-    line(-5, 16, 55, 16);
-    line(55, 16, 55, -6);
-    line(55, -6, 120, -6);
-    strokeWeight(4);
-    float lift = 15 * abs(stride) * intensity;
-    ellipse(0, -42 - lift, 23, 23);
-    line(0, -30 - lift, 0, 9 - lift);
-    line(0, -18 - lift, -24, 2 - lift + 7 * stride);
-    line(0, -18 - lift, 24, 2 - lift - 7 * stride);
-    line(0, 9 - lift, -25, 42 - lift - 15 * stride);
-    line(0, 9 - lift, 25, 42 - lift + 15 * stride);
-  } else {  // WALKING, RUNNING, OTHER
-    float amplitude = (activity == 1 ? 33 : activity == 4 ? 18 : 23) * intensity;
-    float bounce = (activity == 1 ? 11 : activity == 4 ? 7 : 3) * abs(stride) * intensity;
-    float arm = amplitude * stride;
-    float leg = amplitude * stride;
-    ellipse(0, -35 - bounce, 25, 25);
-    line(0, -22 - bounce, 0, 18 - bounce);
-    if (activity == 4) {  // OTHER: jumping-jack style exercise
-      float spread = 12 + 16 * abs(stride) * intensity;
-      line(0, -12 - bounce, -spread, -30 - bounce);
-      line(0, -12 - bounce, spread, -30 - bounce);
-      line(0, 18 - bounce, -spread, 49 - bounce);
-      line(0, 18 - bounce, spread, 49 - bounce);
-    } else {
-      line(0, -12 - bounce, -27, 10 - bounce + arm);
-      line(0, -12 - bounce, 27, 10 - bounce - arm);
-      line(0, 18 - bounce, -24 - leg, 48 - bounce);
-      line(0, 18 - bounce, 24 + leg, 48 - bounce);
+  if (activity == 3) {
+    // The avatar's feet follow each stair tread, rising with each step.
+    float progress = (phase * 0.30) % 4.0;
+    int step = floor(progress);
+    float stepFraction = progress - step;
+    float x = -93 + progress * 46;
+    float groundY = 45 - 13 * step;
+    float rise = 13 * sin(stepFraction * HALF_PI);
+    stroke(116, 140, 170); strokeWeight(2);
+    for (int i=0; i<5; i++) {
+      float sx=-116+i*46;
+      float sy=45-i*13;
+      line(sx,sy,sx+46,sy);
+      if(i<4) line(sx+46,sy,sx+46,sy-13);
     }
+    drawFitnessAvatar(x,groundY-rise,sin(phase*2),0.48);
+  } else if (activity == 2) {
+    float groundY=48;
+    stroke(66,91,124);strokeWeight(2);noFill();
+    ellipse(-65,groundY-24,47,47);
+    ellipse(65,groundY-24,47,47);
+    line(-65,groundY-24,-20,groundY-53);
+    line(-20,groundY-53,0,groundY-24);
+    line(0,groundY-24,-65,groundY-24);
+    line(-20,groundY-53,65,groundY-24);
+    line(-20,groundY-53,-15,groundY-64);
+    line(-30,groundY-64,-4,groundY-64);
+    line(65,groundY-24,48,groundY-70);
+    line(40,groundY-70,60,groundY-70);
+    float crank=phase*2.0;
+    float pedalX=13*cos(crank);
+    float pedalY=groundY-24+13*sin(crank);
+    stroke(37,105,187);strokeWeight(4);
+    line(-19,groundY-89,-23,groundY-58);
+    line(-23,groundY-58,pedalX,pedalY);
+    line(-19,groundY-89,48,groundY-70);
+    fill(37,105,187);noStroke();
+    ellipse(-19,groundY-101,18,18);
+  } else if (activity == 4) {
+    float spread=abs(sin(phase));
+    stroke(37,105,187);strokeWeight(4);strokeCap(ROUND);
+    float hip=18;
+    line(0,hip-40,0,hip);
+    line(0,hip-30,-15-20*spread,hip-53-6*spread);
+    line(0,hip-30,15+20*spread,hip-53-6*spread);
+    line(0,hip,-11-22*spread,49);
+    line(0,hip,11+22*spread,49);
+    fill(37,105,187);noStroke();ellipse(0,hip-51,19,19);
+  } else {
+    // Walk and run use opposing arm/leg swings and different bounce.
+    float pace=activity==1 ? 1.9 : 1.0;
+    float swing=sin(phase*pace);
+    float bounce=(activity==1?6:2)*abs(swing);
+    drawFitnessAvatar(0,49-bounce,swing,activity==1?0.95:0.52);
   }
   popMatrix();
-  strokeWeight(1);
-  fill(0);
-  textAlign(CENTER);
-  textSize(14);
-  if (activity >= 0 && activity < fitnessActivities.length) {
-    text(fitnessActivities[activity], centerX, centerY + 95);
-  }
-  textSize(13);
-  text(fitnessAnimationLabel(), centerX, centerY + 115);
-  textAlign(LEFT);
+  fill(33,55,83);textAlign(CENTER,BASELINE);
+  textSize(12);
+  if(activity>=0 && activity<fitnessActivities.length)
+    text(fitnessActivities[activity],centerX,centerY-54);
+  textSize(11);
+  text(fitnessAnimationLabel(),centerX,centerY+68);
+  popStyle();
 }
 
+// footY is the actual ground contact, not the figure's body center.
+void drawFitnessAvatar(float x, float footY, float swing, float amount) {
+  float hip=footY-20, shoulder=footY-42;
+  stroke(37,105,187);strokeWeight(4);strokeCap(ROUND);
+  line(x,shoulder,x,hip);
+  line(x,shoulder+5,x-14,shoulder+19+swing*11*amount);
+  line(x,shoulder+5,x+14,shoulder+19-swing*11*amount);
+  line(x,hip,x-12-swing*12*amount,footY);
+  line(x,hip,x+12+swing*12*amount,footY);
+  noStroke();fill(37,105,187);ellipse(x,shoulder-11,18,18);
+}
+
+
+// A person drawn relative to the surface beneath their feet.
+void drawFitnessPerson(float x, float footY, float stride, float amount) {
+  float hip = footY - 31;
+  float shoulder = footY - 66;
+  stroke(34, 105, 178);
+  strokeWeight(4);
+  strokeCap(ROUND);
+  line(x, shoulder, x, hip);
+  line(x, shoulder + 9, x - 18, shoulder + 27 + stride * 13 * amount);
+  line(x, shoulder + 9, x + 18, shoulder + 27 - stride * 13 * amount);
+  line(x, hip, x - 13 - stride * 15 * amount, footY);
+  line(x, hip, x + 13 + stride * 15 * amount, footY);
+  fill(34, 105, 178);
+  noStroke();
+  ellipse(x, shoulder - 12, 20, 20);
+}
 
 // ========================================
 // ANIMATION SPEED

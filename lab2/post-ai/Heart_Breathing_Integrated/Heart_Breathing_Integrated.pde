@@ -52,8 +52,9 @@ void setup() {
 
 void draw() {
 
-  background(255);
+  background(245, 249, 254);
 
+  drawAppChrome();
   drawHeader();
   drawNavigation();
 
@@ -84,15 +85,12 @@ void draw() {
 // ========================================
 
 void drawHeader() {
-
-  fill(0);
-  textSize(30);
-
-  text(
-    "Heart + Breathing Monitor",
-    30,
-    42
-  );
+  pushStyle();
+  fill(27, 49, 80);textAlign(LEFT,BASELINE);
+  textSize(28);text("Heart + Breathing Monitor",30,42);
+  fill(91,111,137);textSize(12);
+  text("LIVE PHYSIOLOGICAL MONITORING",705,40);
+  popStyle();
 }
 
 
@@ -101,135 +99,23 @@ void drawHeader() {
 // ========================================
 
 void drawNavigation() {
-
-  stroke(0);
-
-
-  // HOME
-
-  if (mode == MODE_HOME) {
-    fill(180);
+  pushStyle();
+  String[] names={"HOME","FITNESS","STRESS","MEDITATION"};
+  int[] xs={30,165,330,495};
+  int[] ws={120,150,150,170};
+  for(int i=0;i<4;i++) {
+    boolean active=mode==i;
+    noStroke();fill(active?color(37,105,187):color(229,237,248));
+    rect(xs[i],65,ws[i],50,12);
+    fill(active?color(255):color(56,77,106));
+    textAlign(CENTER,CENTER);textSize(15);
+    text(names[i],xs[i]+ws[i]/2,90);
   }
-  else {
-    fill(220);
-  }
-
-  rect(
-    30,
-    65,
-    120,
-    50
-  );
-
-
-  // FITNESS
-
-  if (mode == MODE_FITNESS) {
-    fill(180);
-  }
-  else {
-    fill(220);
-  }
-
-  rect(
-    165,
-    65,
-    150,
-    50
-  );
-
-
-  // STRESS
-
-  if (mode == MODE_STRESS) {
-    fill(180);
-  }
-  else {
-    fill(220);
-  }
-
-  rect(
-    330,
-    65,
-    150,
-    50
-  );
-
-
-  // MEDITATION
-
-  if (mode == MODE_MEDITATION) {
-    fill(180);
-  }
-  else {
-    fill(220);
-  }
-
-  rect(
-    495,
-    65,
-    170,
-    50
-  );
-
-
-  fill(0);
-
-  textSize(16);
-
-  text(
-    "HOME",
-    67,
-    96
-  );
-
-  text(
-    "FITNESS",
-    205,
-    96
-  );
-
-  text(
-    "STRESS",
-    375,
-    96
-  );
-
-  text(
-    "MEDITATION",
-    525,
-    96
-  );
-
-
-  // --------------------------------------
-  // Sensor status
-  // --------------------------------------
-
-  textSize(13);
-
-
-  if (leadsOff) {
-
-    fill(255, 0, 0);
-
-    text(
-      "ECG LEADS OFF",
-      790,
-      95
-    );
-  }
-
-  else {
-
-    fill(0, 150, 0);
-
-    text(
-      "SENSOR ACTIVE",
-      790,
-      95
-    );
-  }
+  textAlign(LEFT,BASELINE);textSize(12);
+  fill(leadsOff?color(194,58,67):color(29,139,106));
+  ellipse(781,91,9,9);
+  text(leadsOff?"ECG LEADS OFF":"SENSOR ACTIVE",795,95);
+  popStyle();
 }
 
 
@@ -565,4 +451,13 @@ void keyPressed() {
 
     fitnessKeyPressed();
   }
+}
+
+void drawAppChrome() {
+  pushStyle();
+  noStroke();fill(231,240,252);rect(0,0,width,126);
+  fill(255);rect(16,130,width-32,height-146,16);
+  stroke(220,231,245);noFill();
+  rect(16,130,width-32,height-146,16);
+  popStyle();
 }
