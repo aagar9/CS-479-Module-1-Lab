@@ -159,6 +159,51 @@ void drawStatusCard(float x, float y, float w, float h, String label, String val
   uiText(value, x + 31, y + h - (h < 75 ? 9 : 18), valueSize, accent, true);
 }
 
+// Section IV ONLY: adaptive text for the two compact classification cards.
+// Does not change card sizes, positions, colors, or shared UI drawing functions.
+void drawSectionIVClassificationCard(float x, float y, float w, float h,
+                                     String label, String value, color accent) {
+  drawPanel(x, y, w, h);
+  noStroke();
+  fill(accent);
+  rect(x + 15, y + 15, 5, h - 30, 3);
+  uiText(label, x + 31, y + 30, 11, uiMuted, true);
+
+  float left = x + 31;
+  float maxTextWidth = w - 44; // x+31 text start, at least 13px right margin
+
+  // Only lengthy respiratory descriptions are split into two lines.
+  // The classification strings and their original colors are untouched.
+  boolean twoLines = value.equals("SLOW BREATHING") ||
+                     value.equals("NORMAL BREATHING") ||
+                     value.equals("FAST BREATHING") ||
+                     value.equals("BREATHING PAUSE");
+
+  textStyle(BOLD);
+  if (twoLines) {
+    int gap = value.indexOf(' ');
+    String firstLine = value.substring(0, gap);
+    String secondLine = value.substring(gap + 1);
+    float size = 21;
+    textSize(size);
+    while (size > 12 &&
+           max(textWidth(firstLine), textWidth(secondLine)) > maxTextWidth) {
+      size -= 0.5;
+      textSize(size);
+    }
+    uiText(firstLine, left, y + 53, size, accent, true);
+    uiText(secondLine, left, y + 75, size, accent, true);
+  } else {
+    float size = 25;
+    textSize(size);
+    while (size > 12 && textWidth(value) > maxTextWidth) {
+      size -= 0.5;
+      textSize(size);
+    }
+    uiText(value, left, y + h - 18, size, accent, true);
+  }
+}
+
 color colorForStatus(String s) {
   if (s.equals("CALM") || s.equals("MATCHED") || s.equals("NORMAL HR") ||
       s.equals("NORMAL BREATHING")) return uiGreen;
@@ -577,6 +622,13 @@ int Tbreath = 0;
 
 float respiratoryRate = 0;
 
+// RR smoothing: use the mean of up to the 3 most recent VALID complete
+// breathing periods. The current cycle's Tbreath, Tinsp and Tex stay unchanged.
+final int RR_PERIOD_WINDOW = 3;
+int[] recentBreathPeriods = new int[RR_PERIOD_WINDOW];
+int recentBreathPeriodIndex = 0;
+int recentBreathPeriodCount = 0;
+
 final float MIN_VALID_RR = 4.0;
 final float MAX_VALID_RR = 60.0;
 
@@ -899,10 +951,26 @@ void calculateBreathingRate() {
           int newTbreath = new_in_start - in_start;
           float newRR = 60000.0 / newTbreath;
 
-          // Invalid RR does not overwrite the previous valid value
+          // Invalid RR does not overwrite the previous valid value or the
+          // rolling period buffer. The original breathing-phase logic is unchanged.
           if (newRR >= MIN_VALID_RR && newRR <= MAX_VALID_RR) {
             Tbreath = newTbreath;
-            respiratoryRate = newRR;
+
+            // Add the new valid period to the circular buffer, replacing the
+            // oldest after three full periods have been recorded.
+            recentBreathPeriods[recentBreathPeriodIndex] = newTbreath;
+            recentBreathPeriodIndex = (recentBreathPeriodIndex + 1) % RR_PERIOD_WINDOW;
+            if (recentBreathPeriodCount < RR_PERIOD_WINDOW) recentBreathPeriodCount++;
+
+            // Compute RR from the MEAN PERIOD (not from the mean of rates).
+            // During startup use the one or two valid periods available;
+            // after the third valid breath, always average the latest three.
+            float totalPeriod = 0;
+            for (int i = 0; i < recentBreathPeriodCount; i++) {
+              totalPeriod += recentBreathPeriods[i];
+            }
+            float meanPeriod = totalPeriod / recentBreathPeriodCount;
+            respiratoryRate = 60000.0 / meanPeriod;
 
             // One complete valid respiratory cycle has finished
             breathCount++;
@@ -2462,10 +2530,10 @@ void updateSectionClassification() {
 void drawSectionActive() {
   pageHeading("Section IV  /  Live pattern monitoring", "Heart-rate and breathing classifications with their cardiorespiratory response");
   drawVitals(118, false);
-  drawStatusCard(738, 118, 155, 84, "HEART STATE", sectionHeartState,
-                 colorForStatus(sectionHeartState));
-  drawStatusCard(908, 118, 162, 84, "BREATHING STATE", sectionBreathingState,
-                 colorForStatus(sectionBreathingState));
+  drawSectionIVClassificationCard(738, 118, 155, 84, "HEART STATE", sectionHeartState,
+                                  colorForStatus(sectionHeartState));
+  drawSectionIVClassificationCard(908, 118, 162, 84, "BREATHING STATE", sectionBreathingState,
+                                  colorForStatus(sectionBreathingState));
   drawStatusCard(30, 216, 1040, 57, "CARDIORESPIRATORY RESPONSE", sectionResponse,
                  colorForStatus(sectionResponse));
   drawECGGraph(ecgPlot, 30, 290, 505, 245);
