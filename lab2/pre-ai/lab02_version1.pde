@@ -7,10 +7,7 @@ import java.util.ArrayList;
 // FSR graph: 10-sample average (including zeros), fixed scale 0-1023
 // Respiratory detection: separate 50-sample average
 
-final int NORMAL = 0;
-final int BOLD = 1;
 PFont regularFont;
-PFont boldFont;
 
 final int MODE_HOME = 0;
 final int MODE_FITNESS = 1;
@@ -26,9 +23,9 @@ final float GRAPH_ADC_MAX = 1023;
 final Object graphLock = new Object();
 ArrayList<Float> graphTimes = new ArrayList<Float>();
 
-// VISUALIZZAZIONE FSR: stesso filtro della UI_LAB2_NO_AI originale.
-// Media mobile di 10 campioni, inclusi gli zeri. Non modifica updateFSR(),
-// RR, Tinsp, Tex o il filtro fisiologico di 50 campioni.
+//  FSR VISUALIZATION:
+// rolling mean of 10 samples, zero included. updateFSR() is not modified,
+// RR, Tinsp, Tex of 50 samples
 final int FSR_GRAPH_WINDOW = 10;
 float[] fsrGraphWindow = new float[FSR_GRAPH_WINDOW];
 int fsrGraphIndex = 0;
@@ -60,13 +57,8 @@ void setup() {
   size(1100, 720);
   frameRate(60);
   regularFont = createFont("Arial", 15);
-  boldFont = createFont("Arial Bold", 15);
   textFont(regularFont);
   setupSignalProcessing();
-}
-
-void textStyle(int style) {
-  textFont(style == BOLD ? boldFont : regularFont);
 }
 
 void draw() {
@@ -100,10 +92,8 @@ String twoDecimals(float value) {
 
 void drawHeader() {
   fill(0);
-  textStyle(BOLD);
-  textSize(18);
+  textSize(20);
   text("ECG and Breathing Monitor", 20, 32);
-  textStyle(NORMAL);
   textSize(10);
   if (myPort == null) {
     fill(180, 0, 0);
@@ -134,13 +124,11 @@ void drawHome() {
   text("Respiratory Rate", 280, 78);
   text("Inspiration", 570, 78);
   text("Expiration", 810, 78);
-  textStyle(BOLD);
-  textSize(20);
+  textSize(22);
   text(hr > 0 ? hr + " BPM" : "--", 20, 106);
   text(rr > 0 ? oneDecimal(rr) + " /min" : "--", 280, 106);
   text(tin > 0 ? twoDecimals(tin) + " s" : "--", 570, 106);
   text(tex > 0 ? twoDecimals(tex) + " s" : "--", 810, 106);
-  textStyle(NORMAL);
   drawECGGraph(ecgPlot, 20, 145, 510, 320);
   drawRespGraph(fsrPlot, 570, 145, 510, 320);
   drawModeButton(fitnessButtonX, homeButtonY, homeButtonW, homeButtonH, "FITNESS MODE");
@@ -157,10 +145,10 @@ void drawHome() {
 // AFTER releasing the lock. This avoids concurrent edits while drawing.
 
 void drawECGGraph(ArrayList<Float> data, float x, float y, float w, float h) {
-  drawADCSpectrum(data, x, y, w, h, "ECG", color(220, 45, 45));
+  drawADCSpectrum(data, x, y, w, h, "ECG", color(0));
 }
 void drawRespGraph(ArrayList<Float> data, float x, float y, float w, float h) {
-  drawADCSpectrum(data, x, y, w, h, "FSR", color(50, 90, 220));
+  drawADCSpectrum(data, x, y, w, h, "FSR", color(0));
 }
 
 void drawADCSpectrum(ArrayList<Float> data, float x, float y, float w, float h,
@@ -170,7 +158,6 @@ void drawADCSpectrum(ArrayList<Float> data, float x, float y, float w, float h,
   strokeWeight(1);
   rect(x, y, w, h);
   fill(0);
-  textStyle(NORMAL);
   textSize(12);
   text(title, x + 10, y + 18);
   float left = x + 10;
@@ -230,7 +217,6 @@ void drawModeButton(float x, float y, float w, float h, String label) {
   strokeWeight(1);
   rect(x, y, w, h);
   fill(0);
-  textStyle(NORMAL);
   textSize(13);
   textAlign(CENTER, CENTER);
   text(label, x + w / 2, y + h / 2);
@@ -446,7 +432,7 @@ void serialEvent(Serial p) {
   incoming = trim(incoming);
   if (incoming.length() == 0) return;
 
-  // Arduino: "ECG,FSR" oppure "!,FSR" quando gli elettrodi sono scollegati.
+  // "ECG,FSR" oppure "!,FSR" quando gli elettrodi sono scollegati.
   String[] values = split(incoming, ',');
   if (values == null || values.length != 2) return;
   int newECG = 0;
@@ -471,8 +457,8 @@ void serialEvent(Serial p) {
       updateECG();
     }
 
-    // FILTRO SOLO GRAFICO: media di 10 campioni raw FSR, zeri inclusi.
-    // Non usare current_mean: il rilevatore respiratorio ignora gli zeri.
+    // FILTER USED ONLY FOR THE GRAPH.
+    // don't use current_mean because zeros are ignored.
     float displayFSR = smoothFSRForGraph(newFSR);
     plotCounter++;
     if (plotCounter >= 5) {
@@ -678,7 +664,6 @@ void calculateBreathingRate() {
   // Current assumption:
   // increasing FSR -> inspiration
   // decreasing FSR -> expiration
-  // If the real signal has opposite polarity, swap the two conditions.
 
   // INITIAL PHASE IDENTIFICATION
   if (!breathingInitialized) {
@@ -826,10 +811,8 @@ void drawFitness() {
 
 void drawFitnessAge() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("FITNESS MODE", 30, 100);
-  textStyle(NORMAL);
   textSize(18);
   text("Enter your age:", 30, 160);
   fill(255);
@@ -906,16 +889,12 @@ void updateFitnessBaseline() {
 
 void drawFitnessBaseline() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("FITNESS MODE - RESTING BASELINE", 30, 95);
-  textStyle(NORMAL);
   drawFitnessLiveParameters(145, false);
   int remaining = max(0, 30 - (millis() - fitnessBaselineStart) / 1000);
-  textStyle(BOLD);
   textSize(32);
   text("Baseline: " + remaining + " s remaining", 30, 255);
-  textStyle(NORMAL);
   fill(80);
   textSize(14);
   text("Sit quietly while resting HR and respiratory rate are measured.", 30, 300);
@@ -925,10 +904,8 @@ void drawFitnessBaseline() {
 
 void drawFitnessBaselineFailed() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("FITNESS MODE", 30, 100);
-  textStyle(NORMAL);
   fill(180, 0, 0);
   textSize(18);
   text("Not enough valid HR/RR data were collected.", 30, 165);
@@ -942,10 +919,8 @@ void drawFitnessBaselineFailed() {
 
 void drawFitnessReady() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("FITNESS MODE - BASELINE COMPLETE", 30, 95);
-  textStyle(NORMAL);
   textSize(18);
   text("Age: " + fitnessAge, 30, 150);
   text("Estimated maximum HR: " + (220 - fitnessAge) + " BPM", 30, 185);
@@ -1042,10 +1017,8 @@ int fitnessZoneColor(float hr) {
 
 void drawFitnessActive() {
   fill(0);
-  textStyle(BOLD);
   textSize(24);
   text("FITNESS MODE - LIVE ACTIVITY", 30, 78);
-  textStyle(NORMAL);
   drawFitnessLiveParameters(110, true);
 
   // ECG and respiration
@@ -1075,14 +1048,12 @@ void drawFitnessLiveParameters(float y, boolean showZone) {
   text("Inspiration", 390, y);
   text("Expiration", 580, y);
   if (showZone) text("Cardio Zone", 800, y);
-  textStyle(BOLD);
-  textSize(19);
+  textSize(21);
   text(hr > 0 ? hr + " BPM" : "--", 30, y + 27);
   text(rr > 0 ? oneDecimal(rr) + " /min" : "--", 200, y + 27);
   text(tin > 0 ? twoDecimals(tin) + " s" : "--", 390, y + 27);
   text(tex > 0 ? twoDecimals(tex) + " s" : "--", 580, y + 27);
   if (showZone) text(getFitnessZoneLabel(), 800, y + 27);
-  textStyle(NORMAL);
 }
 
 // HR VS TIME GRAPH WITH CARDIO ZONES
@@ -1231,29 +1202,23 @@ void stopFitnessActivity() {
 
 void drawFitnessSummary() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("FITNESS SESSION COMPLETE", 30, 85);
-  textStyle(NORMAL);
   textSize(16);
   text("Resting HR: " + oneDecimal(fitnessRestingHR) + " BPM", 30, 130);
   text("Resting RR: " + oneDecimal(fitnessRestingRR) + " breaths/min", 300, 130);
   float totalTime = (fitnessActivityStop - fitnessActivityStart) / 1000.0;
-  textStyle(BOLD);
-  textSize(19);
+  textSize(21);
   text("Time spent in each cardio zone", 30, 190);
-  textStyle(NORMAL);
   drawFitnessSummaryRow("BELOW 50%", fitnessBelowZoneTime, color(235), 240);
   drawFitnessSummaryRow("VERY LIGHT  50-60%", fitnessZoneTime[0], color(170), 290);
   drawFitnessSummaryRow("LIGHT  60-70%", fitnessZoneTime[1], color(70, 150, 220), 340);
   drawFitnessSummaryRow("MODERATE  70-80%", fitnessZoneTime[2], color(50, 165, 90), 390);
   drawFitnessSummaryRow("HARD  80-90%", fitnessZoneTime[3], color(240, 155, 30), 440);
   drawFitnessSummaryRow("MAXIMUM  >90%", fitnessZoneTime[4], color(215, 45, 55), 490);
-  textStyle(BOLD);
-  textSize(18);
+  textSize(20);
   fill(0);
   text("Total activity time: " + oneDecimal(totalTime) + " s", 30, 555);
-  textStyle(NORMAL);
   drawModeButton(30, 610, 220, 50, "END ACTIVITY");
 }
 
@@ -1443,10 +1408,8 @@ void drawStress() {
 
 void drawStressReadyScreen(String title, String instruction, String buttonLabel) {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("STRESS MODE - " + title, 30, 100);
-  textStyle(NORMAL);
   textSize(17);
   text(instruction, 30, 155);
   if (stressState != STRESS_REST_READY) {
@@ -1537,20 +1500,16 @@ void finishStressCalibration() {
 
 void drawStressAcquisition(String title) {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("STRESS MODE - " + title, 30, 95);
-  textStyle(NORMAL);
   int hr = getHeartRate();
   float rr = getRespRate();
   textSize(16);
   text("Current HR", 30, 155);
   text("Current RR", 250, 155);
-  textStyle(BOLD);
-  textSize(22);
+  textSize(24);
   text(hr > 0 ? hr + " BPM" : "--", 30, 185);
   text(rr > 0 ? oneDecimal(rr) + " breaths/min" : "--", 250, 185);
-  textStyle(NORMAL);
   if (stressState != STRESS_REST_ACTIVE) {
     textSize(15);
     text("Resting HR: " + oneDecimal(stressRestHR) + " BPM", 550, 160);
@@ -1558,10 +1517,8 @@ void drawStressAcquisition(String title) {
   }
 
   int remaining = max(0, 30 - (millis() - stressPhaseStart) / 1000);
-  textStyle(BOLD);
   textSize(30);
   text(remaining + " s remaining", 30, 270);
-  textStyle(NORMAL);
   textSize(14);
   text("Valid HR samples: " + stressHRCount, 30, 315);
   text("Valid RR samples: " + stressRRCount, 250, 315);
@@ -1571,10 +1528,8 @@ void drawStressAcquisition(String title) {
 
 void drawStressSummary() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("STRESS CALIBRATION COMPLETE", 30, 95);
-  textStyle(NORMAL);
   textSize(17);
   text("Condition", 30, 155);
   text("Heart Rate", 260, 155);
@@ -1582,10 +1537,14 @@ void drawStressSummary() {
   text("Resting", 30, 205);
   text(oneDecimal(stressRestHR) + " BPM", 260, 205);
   text(oneDecimal(stressRestRR) + " breaths/min", 500, 205);
+  fill(200, 30, 30);
   text("Stressed", 30, 250);
+  fill(0);
   text(oneDecimal(stressStressHR) + " BPM", 260, 250);
   text(oneDecimal(stressStressRR) + " breaths/min", 500, 250);
+  fill(20, 140, 60);
   text("Calm", 30, 295);
+  fill(0);
   text(oneDecimal(stressCalmHR) + " BPM", 260, 295);
   text(oneDecimal(stressCalmRR) + " breaths/min", 500, 295);
   drawModeButton(30, 370, 260, 55, "START LIVE DETECTION");
@@ -1627,10 +1586,8 @@ void updateStressLiveState() {
 
 void drawStressLive() {
   fill(0);
-  textStyle(BOLD);
   textSize(24);
   text("STRESS MODE - LIVE DETECTION", 30, 85);
-  textStyle(NORMAL);
   int hr = getHeartRate();
   float rr = getRespRate();
   float tin = getInhaleTime();
@@ -1640,13 +1597,11 @@ void drawStressLive() {
   text("RR", 180, 125);
   text("Inspiration", 350, 125);
   text("Expiration", 520, 125);
-  textStyle(BOLD);
-  textSize(19);
+  textSize(21);
   text(hr > 0 ? hr + " BPM" : "--", 30, 152);
   text(rr > 0 ? oneDecimal(rr) + " /min" : "--", 180, 152);
   text(tin > 0 ? twoDecimals(tin) + " s" : "--", 350, 152);
   text(tex > 0 ? twoDecimals(tex) + " s" : "--", 520, 152);
-  textStyle(NORMAL);
 
   // State on the right
   textSize(15);
@@ -1654,11 +1609,9 @@ void drawStressLive() {
   text("STATE", 790, 120);
   if (stressLiveState.equals("STRESSED")) fill(200, 30, 30);
   else if (stressLiveState.equals("CALM")) fill(20, 140, 60);
-  else fill(100);
-  textStyle(BOLD);
+  else fill(0);
   textSize(25);
   text(stressLiveState, 790, 153);
-  textStyle(NORMAL);
 
   // Compact calibration values
   fill(0);
@@ -1782,10 +1735,8 @@ void drawMeditation() {
 
 void drawMeditationBaselineReady() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("MEDITATION MODE", 30, 100);
-  textStyle(NORMAL);
   textSize(17);
   text("First collect a 30-second resting baseline.", 30, 160);
   text("Sit quietly and breathe normally.", 30, 195);
@@ -1831,10 +1782,8 @@ void updateMeditationBaseline() {
 
 void drawMeditationBaseline() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("MEDITATION MODE - RESTING BASELINE", 30, 95);
-  textStyle(NORMAL);
   int hr = getHeartRate();
   float rr = getRespRate();
   float tin = getInhaleTime();
@@ -1844,18 +1793,14 @@ void drawMeditationBaseline() {
   text("RR", 220, 150);
   text("Inspiration", 430, 150);
   text("Expiration", 650, 150);
-  textStyle(BOLD);
-  textSize(20);
+  textSize(22);
   text(hr > 0 ? hr + " BPM" : "--", 30, 180);
   text(rr > 0 ? oneDecimal(rr) + " /min" : "--", 220, 180);
   text(tin > 0 ? twoDecimals(tin) + " s" : "--", 430, 180);
   text(tex > 0 ? twoDecimals(tex) + " s" : "--", 650, 180);
-  textStyle(NORMAL);
   int remaining = max(0, 30 - (millis() - meditationBaselineStart) / 1000);
-  textStyle(BOLD);
   textSize(31);
   text("Baseline: " + remaining + " s remaining", 30, 260);
-  textStyle(NORMAL);
   textSize(14);
   fill(80);
   text("Valid HR samples: " + meditationHRCount, 30, 310);
@@ -1864,10 +1809,8 @@ void drawMeditationBaseline() {
 
 void drawMeditationBaselineFailed() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("MEDITATION MODE", 30, 100);
-  textStyle(NORMAL);
   fill(180, 0, 0);
   textSize(18);
   text("Not enough valid HR/RR data were collected.", 30, 165);
@@ -1879,19 +1822,15 @@ void drawMeditationBaselineFailed() {
 
 void drawMeditationReady() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("MEDITATION MODE - BASELINE COMPLETE", 30, 95);
-  textStyle(NORMAL);
   textSize(18);
   text("Resting HR: " + oneDecimal(meditationRestHR) + " BPM", 30, 160);
   text("Resting RR: " + oneDecimal(meditationRestRR) + " breaths/min", 30, 200);
   textSize(17);
   text("Meditation target:", 30, 265);
-  textStyle(BOLD);
-  textSize(22);
+  textSize(24);
   text("Expiration time = 3 x Inspiration time", 30, 300);
-  textStyle(NORMAL);
   textSize(14);
   text("Allowed timing difference: +/-" + oneDecimal(MEDITATION_TOLERANCE) + " s", 30, 335);
   drawModeButton(30, 390, 230, 55, "START MEDITATION");
@@ -1925,10 +1864,8 @@ void updateMeditationBreathing() {
 
 void drawMeditationActive() {
   fill(0);
-  textStyle(BOLD);
   textSize(24);
   text("MEDITATION MODE - LIVE", 30, 80);
-  textStyle(NORMAL);
   int hr = getHeartRate();
   float rr = getRespRate();
   float tin = getInhaleTime();
@@ -1938,29 +1875,24 @@ void drawMeditationActive() {
   text("RR", 180, 120);
   text("Inspiration", 340, 120);
   text("Expiration", 510, 120);
-  textStyle(BOLD);
-  textSize(19);
+  textSize(21);
   text(hr > 0 ? hr + " BPM" : "--", 30, 147);
   text(rr > 0 ? oneDecimal(rr) + " /min" : "--", 180, 147);
   text(tin > 0 ? twoDecimals(tin) + " s" : "--", 340, 147);
   text(tex > 0 ? twoDecimals(tex) + " s" : "--", 510, 147);
-  textStyle(NORMAL);
   fill(0);
   textSize(14);
   text("Target: Texp = 3 x Tinsp", 740, 115);
   text("Consecutive breaths outside target: " + meditationBadBreaths, 740, 140);
   if (meditationBadBreaths >= 3) {
     fill(200, 30, 30);
-    textStyle(BOLD);
     textSize(24);
     text("ADJUST BREATHING", 740, 180);
   } else {
     fill(20, 140, 60);
-    textStyle(BOLD);
     textSize(24);
     text("KEEP BREATHING", 740, 180);
   }
-  textStyle(NORMAL);
   drawECGGraph(ecgPlot, 30, 230, 500, 270);
   drawRespGraph(fsrPlot, 570, 230, 500, 270);
   fill(0);
@@ -2090,10 +2022,8 @@ void drawSectionIV() {
 
 void drawSectionBaselineReady() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("CARDIORESPIRATORY PATTERN MONITOR", 30, 100);
-  textStyle(NORMAL);
   textSize(17);
   text("First collect a 30-second resting baseline.", 30, 160);
   text("Heart rate and breathing rate will then be compared with resting values.", 30, 195);
@@ -2148,10 +2078,8 @@ void updateSectionBaseline() {
 
 void drawSectionBaseline() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("SECTION IV - RESTING BASELINE", 30, 95);
-  textStyle(NORMAL);
   int hr = getHeartRate();
   float rr = getRespRate();
   float tin = getInhaleTime();
@@ -2161,18 +2089,14 @@ void drawSectionBaseline() {
   text("RR", 220, 150);
   text("Inspiration", 430, 150);
   text("Expiration", 650, 150);
-  textStyle(BOLD);
-  textSize(20);
+  textSize(22);
   text(hr > 0 ? hr + " BPM" : "--", 30, 180);
   text(rr > 0 ? oneDecimal(rr) + " /min" : "--", 220, 180);
   text(tin > 0 ? twoDecimals(tin) + " s" : "--", 430, 180);
   text(tex > 0 ? twoDecimals(tex) + " s" : "--", 650, 180);
-  textStyle(NORMAL);
   int remaining = max(0, 30 - (millis() - sectionBaselineStart) / 1000);
-  textStyle(BOLD);
   textSize(31);
   text("Baseline: " + remaining + " s remaining", 30, 260);
-  textStyle(NORMAL);
   textSize(14);
   fill(80);
   text("Valid HR samples: " + sectionHRCount, 30, 310);
@@ -2183,10 +2107,8 @@ void drawSectionBaseline() {
 
 void drawSectionBaselineFailed() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("CARDIORESPIRATORY PATTERN MONITOR", 30, 100);
-  textStyle(NORMAL);
   fill(180, 0, 0);
   textSize(18);
   text("Not enough valid HR/RR data were collected.", 30, 165);
@@ -2200,10 +2122,8 @@ void drawSectionBaselineFailed() {
 
 void drawSectionReady() {
   fill(0);
-  textStyle(BOLD);
   textSize(25);
   text("CARDIORESPIRATORY PATTERN MONITOR", 30, 95);
-  textStyle(NORMAL);
   textSize(18);
   text("Resting HR: " + oneDecimal(sectionRestHR) + " BPM", 30, 155);
   text("Resting RR: " + oneDecimal(sectionRestRR) + " breaths/min", 30, 195);
@@ -2312,10 +2232,8 @@ void updateSectionClassification() {
 
 void drawSectionActive() {
   fill(0);
-  textStyle(BOLD);
   textSize(24);
   text("CARDIORESPIRATORY PATTERN MONITOR", 30, 80);
-  textStyle(NORMAL);
   int hr = getHeartRate();
   float rr = getRespRate();
   float tin = getInhaleTime();
@@ -2327,44 +2245,32 @@ void drawSectionActive() {
   text("RR", 170, 120);
   text("Inspiration", 330, 120);
   text("Expiration", 500, 120);
-  textStyle(BOLD);
-  textSize(19);
+  textSize(21);
   text(hr > 0 ? hr + " BPM" : "--", 30, 147);
   text(rr > 0 ? oneDecimal(rr) + " /min" : "--", 170, 147);
   text(tin > 0 ? twoDecimals(tin) + " s" : "--", 330, 147);
   text(tex > 0 ? twoDecimals(tex) + " s" : "--", 500, 147);
-  textStyle(NORMAL);
 
   // Current states
   fill(0);
   textSize(14);
   text("Heart state", 700, 110);
   text("Breathing state", 700, 160);
-  textStyle(BOLD);
-  textSize(19);
-  if (sectionHeartState.equals("FAST HR")) fill(200, 50, 40);
-  else if (sectionHeartState.equals("SLOW HR")) fill(40, 100, 200);
-  else fill(40, 140, 70);
+  textSize(21);
+  fill(0);
   text(sectionHeartState, 700, 135);
-  if (sectionBreathingState.equals("BREATHING PAUSE")) fill(200, 30, 30);
-  else if (sectionBreathingState.equals("FAST BREATHING")) fill(200, 80, 30);
-  else if (sectionBreathingState.equals("SLOW BREATHING")) fill(40, 100, 200);
-  else fill(40, 140, 70);
   text(sectionBreathingState, 700, 185);
-  textStyle(NORMAL);
 
   // Main response
   fill(0);
   textSize(14);
   text("Cardiorespiratory response", 700, 215);
   if (sectionResponse.equals("MATCHED")) fill(20, 140, 60);
-  else if (sectionResponse.equals("NOT MATCHED")) fill(200, 120, 20);
-  else if (sectionResponse.equals("BREATHING PAUSE DETECTED")) fill(200, 30, 30);
-  else fill(100);
-  textStyle(BOLD);
-  textSize(22);
+  else if (sectionResponse.equals("NOT MATCHED") ||
+           sectionResponse.equals("BREATHING PAUSE DETECTED")) fill(200, 30, 30);
+  else fill(0);
+  textSize(24);
   text(sectionResponse, 700, 245);
-  textStyle(NORMAL);
 
   // Live signals
   drawECGGraph(ecgPlot, 30, 285, 500, 245);
