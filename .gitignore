@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+.AppleDouble
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Build files
+build/
+dist/
+*.o
+*.out
+
+# IDE files
+.vscode/
+.idea/
+
+# Temporary and backup files
+*.log
+*.tmp
+*.bak
+*.pde.before_*
+*.pde.manual_start_backup
+*~
+
+# Archives
+*.zip
