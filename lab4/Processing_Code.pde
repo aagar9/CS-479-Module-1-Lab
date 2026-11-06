@@ -8,6 +8,7 @@ final int DATA_TIMEOUT = 1500;                    // No valid packet for 1.5 s =
 Serial port;
 int lastData = -1;                               // Processing time of last valid CSV packet
 String serialError = "";
+PFont normalFont, boldFont;                    // Regular UI font and bold AP/ML headings
 boolean mpuOK = false;
 float[] accel = new float[3];                    // ax, ay, az [m/s^2]
 float[] gyro = new float[3];                     // gx, gy, gz [rad/s]
@@ -34,9 +35,10 @@ String[] fsrName = {"Medial Forefoot", "Lateral Forefoot", "Medial Midfoot", "He
 
 // ========== UI AND TEST CONTROL ==========
 final int SECTION_I_MS = 120000;
-final int SECTION_II_MS = 30000;
+final int SECTION_II_MS = 30000;                  // 30 s for each gait calibration
+final int RECOGNITION_MS = 10000;                 // 10 s for automatic gait recognition
 final int SECTION_IV_MS = 20000;
-final int IV_REFERENCE_MS = 3000;               // First 3 s reference, remaining 17 s exercise
+final int IV_REFERENCE_MS = 5000;               // First 5 s reference, remaining 15 s exercise
 int section = 0;                                // Tabs: 0=I, 1=II, 2=III, 3=IV
 boolean recording = false;                     // One active recording at a time
 int test = -1;                                  // -1=I; 0..4=II calibration; 5=recognition; 6=III; 7=IV
@@ -86,36 +88,34 @@ long lastImuTime = -1, belowSince = -1, aboveSince = -1; // MPU timestamps; -1=u
 long activityMs = 0;
 String noteIII = "";
 
-// ========== SECTION IV: BALANCE AND WEIGHT SHIFT ==========
-int modeIV = 0;                                 // 0=Balance; 1=Weight Shift Game
-final int MIN_PERCENT_TOTAL = 30;             // Below this total, MFP/FFP percentages are unreliable
-final float MFP_TOL = 6, FFP_TOL = 6;          // Balance bands: percentage points
-final float HEEL_TOL = 80;                      // Balance and game HEEL band: ADC units
-final float SHIFT_AMOUNT = 12;                 // Game MFP/FFP shift: percentage points
-final float SHIFT_TOL = 5;                     // Game MFP/FFP target tolerance
-final float HEEL_SHIFT = 100;                  // Game HEEL target change: ADC units
-float[] refIV = new float[3];                   // Baseline: MFP%, FFP%, HEEL ADC
-float[] refSumIV = new float[3];                // Running baseline sums
-float[] targetIV = new float[3];                // Current green target lines on three graphs
-float[] accRef = new float[3];                   // Mean 3D gravity vector from baseline
+// ========== SECTION IV: SINGLE-LEG BALANCE ==========
+final int MIN_PERCENT_TOTAL = 30;                  // Minimum FSR sum for meaningful MFP/FFP
+final float MFP_TOL = 6, FFP_TOL = 6;             // Target bands, percentage points
+final float HEEL_TOL = 80;                         // Target band for heel [ADC]
+float[] refIV = new float[3];                      // Reference: MFP%, FFP%, HEEL ADC
+float[] refSumIV = new float[3];                   // Sums used in the first 5 s
+float[] targetIV = new float[3];                   // Fixed green target lines
+float[] accRef = new float[3];                     // Average acceleration vector during reference
 float[] accRefSum = new float[3];
 int refSamples = 0;
 boolean refReady = false;
-long[] insideMs = new long[3];                 // Balance: time in each of three target bands
-long gameHitMs = 0;                             // Weight Shift: time meeting requested targets
-long exerciseMs = 0;                            // Valid exercise duration (after baseline)
+long[] insideMs = new long[3];                    // Keep existing target-time calculations
+long exerciseMs = 0;
 long lastBalanceTime = -1;
-float tiltNow = Float.NaN;                      // Approx. change in sensor orientation [degrees]
-float angleSquares = 0, gyroSquares = 0;        // Sums of squares for RMS computation
-int imuSamplesIV = 0;
-String directionIV = "--", noteIV = "";
+
+// ----- Signed AP/ML angles, measured relative to the 5 s reference -----
+float[] tiltRefIV = new float[2];                  // [0] AP reference, [1] ML reference [deg]
+float[] tiltSumIV = new float[2];                  // Sum of signed deviations [deg]
+float[] tiltSquaresIV = new float[2];              // Sum of squared deviations [deg^2]
+int tiltSamplesIV = 0;                            // Exercise samples used for mean and SD
+String noteIV = "";
 
 // ========== SECTION IV: SESSION GRAPH HISTORY ==========
 // Keep only samples acquired after Start; preserve them after Stop.
 final int IV_HISTORY_N = 600;                     // Enough for 20 s at about 25 samples/s
 int[] balanceTime = new int[IV_HISTORY_N];       // Processing time for each test sample
 float[][] balanceValue = new float[3][IV_HISTORY_N];  // [MFP, FFP, HEEL][sample slot]
-float[][] balanceTarget = new float[3][IV_HISTORY_N]; // Target active WHEN sample was acquired
+float[][] balanceTarget = new float[3][IV_HISTORY_N]; // Reference target for each sample
 int balancePos = 0, balanceCount = 0;            // Circular index and filled positions
 int balanceEndMs = 0;                            // Freeze IV graph after Stop, even if other tests run
 
@@ -125,6 +125,9 @@ void setup() {
   size(1400, 900);                              // Processing window dimensions [pixels]
   frameRate(30);                                // UI refresh; sensor rate comes from Arduino
   Locale.setDefault(Locale.US);                 // Use dot for decimal numbers
+  normalFont = createFont("Arial", 14);          // Normal font for the whole interface
+  boldFont = createFont("Arial Bold", 15);       // Bold only for AP/ML section labels
+  textFont(normalFont);                         // Set regular font as initial UI font
 
   graphColor[0] = color(215, 55, 55);           // Medial Forefoot: red
   graphColor[1] = color(45, 100, 210);          // Lateral Forefoot: blue
@@ -290,32 +293,27 @@ void collectGait() {
   validSamples++;                             // Mean = accumulated percentages / samples
 }
 
+
 String classify(float mfp, float ffp) {
-  float nearest = Float.MAX_VALUE;            // Distance of closest reference so far
-  float second = Float.MAX_VALUE;             // Distance of SECOND closest reference so far
-  int best = -1;                              // Index of closest profile; -1 means none found
+  float nearest = Float.MAX_VALUE;          // Smallest distance found so far
+  int best = -1;                             // Index of closest profile (-1 = none)
 
+  // ----- Compare the test with all available calibrated profiles -----
   for (int i = 0; i < 5; i++) {
-    if (!hasRef[i]) continue;                 // Skip uncalibrated profile, go to next i
+    if (!hasRef[i]) continue;                // Skip profiles without calibration
 
-    float dx = mfp - refMFP[i];               // Difference between test and reference MFP
-    float dy = ffp - refFFP[i];               // Difference between test and reference FFP
-    float distance = sqrt(dx*dx + dy*dy);     // Euclidean distance in MFP/FFP plane
+    float dx = mfp - refMFP[i];              // MFP difference
+    float dy = ffp - refFFP[i];              // FFP difference
+    float distance = sqrt(dx*dx + dy*dy);   // Euclidean distance in MFP-FFP plane
 
-    if (distance < nearest) {                 // This profile is now the closest one
-      second = nearest;                      // Previous closest becomes second-closest
-      nearest = distance;                    // Update best distance
-      best = i;                              // Remember its gait profile index
-    } else if (distance < second) {          // Not best, but closer than previous second?
-      second = distance;                     // Update only second-closest distance
+    if (distance < nearest) {                // Found a closer reference?
+      nearest = distance;                    // Update minimum distance
+      best = i;                              // Save corresponding gait profile
     }
   }
 
-  if (best == -1) return "NO REFERENCES";
-  if (second < Float.MAX_VALUE && second - nearest < AMBIG_MARGIN) {
-    return "AMBIGUOUS";                       // Two profiles are almost equally close
-  }
-  return gait[best];                          // Convert best index into profile name
+  if (best == -1) return "NO REFERENCES";    // No calibrated profiles available
+  return gait[best];                         // Always return the closest profile
 }
 
 
@@ -387,28 +385,6 @@ void updateMotion(long t) {                   // Called for each valid MPU sampl
 }
 
 
-// ========== SECTION IV: WEIGHT-SHIFT TARGETS ==========
-void setShiftTarget(int phase) {
-  for (int i = 0; i < 3; i++) {
-    targetIV[i] = refIV[i];                 // Reset targets to personal baseline first
-  }
-
-  if (phase == 0) {
-    directionIV = "SHIFT MEDIALLY";
-    targetIV[0] = constrain(refIV[0] + SHIFT_AMOUNT, 0, 100); // Raise MFP
-  } else if (phase == 1) {
-    directionIV = "SHIFT LATERALLY";
-    targetIV[0] = constrain(refIV[0] - SHIFT_AMOUNT, 0, 100); // Lower MFP
-  } else if (phase == 2) {
-    directionIV = "SHIFT TO FOREFOOT";
-    targetIV[1] = constrain(refIV[1] + SHIFT_AMOUNT, 0, 100); // Raise FFP
-    targetIV[2] = max(0, refIV[2] - HEEL_SHIFT);  // Unload heel
-  } else {
-    directionIV = "SHIFT TO HEEL";
-    targetIV[1] = constrain(refIV[1] - SHIFT_AMOUNT, 0, 100); // Lower FFP
-    targetIV[2] = min(1023, refIV[2] + HEEL_SHIFT); // Load heel
-  }
-}
 
 
 // ========== SECTION IV: SAVE ONE SESSION GRAPH SAMPLE ==========
@@ -417,15 +393,15 @@ void saveBalancePoint(float[] current) {
   for (int i = 0; i < 3; i++) {
     balanceValue[i][balancePos] = current[i];    // MFP/FFP may be NaN if total load is too low
     balanceTarget[i][balancePos] = refReady ? targetIV[i] : Float.NaN;
-    // Save the target active AT THIS TIME (it changes during Weight Shift).
+    // NaN during calibration; fixed personal reference during exercise.
   }
   balancePos = (balancePos + 1) % IV_HISTORY_N;  // Next circular slot
   if (balanceCount < IV_HISTORY_N) balanceCount++;
 }
 
 
-// ========== SECTION IV: REFERENCE + 17 s EXERCISE ==========
-void collectBalance(long t) {                 // t = Arduino time of current sample [ms]
+// ========== SECTION IV: REFERENCE + 15 s BALANCE EXERCISE ==========
+void collectBalance(long t) {                 // t = Arduino timestamp of current sample [ms]
   if (!mpuOK) {
     stopTest(false);
     noteIV = "MPU unavailable: test stopped.";
@@ -435,26 +411,26 @@ void collectBalance(long t) {                 // t = Arduino time of current sam
   float total = totalFSR();
   boolean validLoad = total >= MIN_PERCENT_TOTAL;
   float[] current = {
-    validLoad ? medialPct(total) : Float.NaN, // No meaningful percentage near zero total load
+    validLoad ? medialPct(total) : Float.NaN,  // MFP undefined with almost zero load
     validLoad ? forefootPct(total) : Float.NaN,
-    fsr[3]                                  // HEEL is always plotted, including zero ADC
+    fsr[3]                                   // Always plot heel ADC, including zero
   };
   int elapsed = millis() - startMs;
 
-  // ----- First 3 seconds: estimate personal reference without another UI state -----
+  // ----- First 5 s: acquire personal FSR and acceleration references -----
   if (elapsed < IV_REFERENCE_MS) {
-    saveBalancePoint(current);              // Plot calibration samples, without target yet
-    if (!validLoad) return;                 // Skip invalid percentages, but NEVER stop test
+    saveBalancePoint(current);               // Graph shows calibration, without green target
+    if (!validLoad) return;                  // Skip undefined ratios, but do NOT stop test
 
     for (int i = 0; i < 3; i++) {
-      refSumIV[i] += current[i];            // MFP, FFP and HEEL reference sums
-      accRefSum[i] += accel[i];            // ax, ay, az reference sums
+      refSumIV[i] += current[i];             // Accumulate MFP, FFP and heel references
+      accRefSum[i] += accel[i];              // Accumulate ax, ay, az for orientation reference
     }
     refSamples++;
     return;
   }
 
-  // ----- Once, at first sample after 3 s: compute means -----
+  // ----- At first exercise sample: calculate means and reference AP/ML angles -----
   if (!refReady) {
     if (refSamples == 0) {
       stopTest(false);
@@ -464,67 +440,57 @@ void collectBalance(long t) {                 // t = Arduino time of current sam
     for (int i = 0; i < 3; i++) {
       refIV[i] = refSumIV[i] / refSamples;
       accRef[i] = accRefSum[i] / refSamples;
-      targetIV[i] = refIV[i];              // Initial horizontal graph target
+      targetIV[i] = refIV[i];                // Green horizontal targets during exercise
     }
+    // atan2(y,x) returns a signed angle in radians; degrees() converts to degrees.
+    // Assumed mounting: +Y down the shank, +X posterior, Z medio-lateral.
+    tiltRefIV[0] = degrees(atan2(accRef[0], -accRef[1])); // AP reference
+    tiltRefIV[1] = degrees(atan2(accRef[2], -accRef[1])); // ML reference
     refReady = true;
   }
 
-  // ----- Select current exercise target -----
-  if (modeIV == 1) {
-    int phase = min(3, (elapsed - IV_REFERENCE_MS) / 4250); // Four 4.25 s phases
-    setShiftTarget(phase);
-  } else {
-    directionIV = "MAINTAIN YOUR REFERENCE";
-  }
-
-  saveBalancePoint(current);               // Store actual FSRs AND target for this phase
+  saveBalancePoint(current);                 // Store current values and reference targets
   if (!validLoad) {
-    lastBalanceTime = -1;               // Ignore invalid percentages; no automatic Stop
+    lastBalanceTime = -1;                    // Ignore invalid FSR samples; no automatic Stop
     return;
   }
 
-  // ----- Count only time intervals between consecutive valid exercise samples -----
+  // ----- Original FSR time-in-target calculation (not displayed in the new UI) -----
   long dt = 0;
-  if (lastBalanceTime >= 0 && t > lastBalanceTime && t - lastBalanceTime <= 300) {
-    dt = t - lastBalanceTime;           // Valid time interval from previous sample
+  if (lastBalanceTime >= 0 && t > lastBalanceTime && t-lastBalanceTime <= 300) {
+    dt = t - lastBalanceTime;               // Use only consecutive valid sample intervals
   }
   lastBalanceTime = t;
   exerciseMs += dt;
 
-  // ----- Balance: three independent time-in-target percentages -----
-  if (modeIV == 0) {
-    if (abs(current[0] - targetIV[0]) <= MFP_TOL) insideMs[0] += dt;
-    if (abs(current[1] - targetIV[1]) <= FFP_TOL) insideMs[1] += dt;
-    if (abs(current[2] - targetIV[2]) <= HEEL_TOL) insideMs[2] += dt;
-  } else {
-    // ----- Game: HEEL participates when moving forward or backward -----
-    boolean reached;
-    if (directionIV.equals("SHIFT MEDIALLY") || directionIV.equals("SHIFT LATERALLY")) {
-      reached = abs(current[0] - targetIV[0]) <= SHIFT_TOL; // MFP target only
-    } else {
-      boolean ffpOK = abs(current[1] - targetIV[1]) <= SHIFT_TOL;
-      boolean heelOK = abs(current[2] - targetIV[2]) <= HEEL_TOL;
-      reached = ffpOK && heelOK;         // BOTH FFP and HEEL must be near target
-    }
-    if (reached) gameHitMs += dt;
-  }
+  if (abs(current[0] - targetIV[0]) <= MFP_TOL) insideMs[0] += dt;
+  if (abs(current[1] - targetIV[1]) <= FFP_TOL) insideMs[1] += dt;
+  if (abs(current[2] - targetIV[2]) <= HEEL_TOL) insideMs[2] += dt;
 
-  // ----- Accelerometer: change of gravity-vector direction relative to baseline -----
-  float dot = accel[0]*accRef[0] + accel[1]*accRef[1] + accel[2]*accRef[2];
-  float lengthNow = magnitude(accel[0], accel[1], accel[2]);
-  float lengthRef = magnitude(accRef[0], accRef[1], accRef[2]);
+  // ----- Signed tilt deviations: AP and ML, relative to initial posture -----
+  // Quasi-static assumption: acceleration is dominated by gravity (not rapid motion).
+  float ap = degrees(atan2(accel[0], -accel[1]));  // AP inclination in sensor frame
+  float ml = degrees(atan2(accel[2], -accel[1]));  // ML inclination in sensor frame
+  float deviationAP = ap - tiltRefIV[0];          // Signed forward/backward deviation
+  float deviationML = ml - tiltRefIV[1];          // Signed medial/lateral deviation
 
-  if (lengthNow > 0.01f && lengthRef > 0.01f) {
-    float cosAngle = constrain(dot / (lengthNow*lengthRef), -1, 1);
-    tiltNow = degrees(acos(cosAngle));    // Angle between current and reference vectors [deg]
-    angleSquares += tiltNow * tiltNow;    // RMS numerator: sum of squared angles
-
-    float w = magnitude(gyro[0], gyro[1], gyro[2]);
-    gyroSquares += w*w;                   // RMS numerator: squared angular speed
-    imuSamplesIV++;
-  }
+  tiltSumIV[0] += deviationAP;                // Sum signed AP angles for final mean
+  tiltSumIV[1] += deviationML;                // Sum signed ML angles for final mean
+  tiltSquaresIV[0] += deviationAP*deviationAP; // Sum squared AP angles for SD
+  tiltSquaresIV[1] += deviationML*deviationML; // Sum squared ML angles for SD
+  tiltSamplesIV++;
 }
 
+// ----- Final mean and standard deviation for each anatomical direction -----
+float meanTiltIV(int axis) {                   // axis=0: AP; axis=1: ML
+  return tiltSumIV[axis] / tiltSamplesIV;      // Signed mean relative to calibration
+}
+
+float swaySDIV(int axis) {
+  float mean = meanTiltIV(axis);
+  float variance = tiltSquaresIV[axis]/tiltSamplesIV - mean*mean;
+  return sqrt(max(0, variance));               // SD = sqrt(E[angle^2] - mean^2)
+}
 
 // ========== START A TEST ==========
 void startTest(int selected) {
@@ -578,7 +544,6 @@ void startTest(int selected) {
     balanceCount = 0;                    // Graph is empty until new Start
     balanceEndMs = 0;
     exerciseMs = 0;
-    gameHitMs = 0;
 
     for (int i = 0; i < 3; i++) {
       refIV[i] = 0;
@@ -588,11 +553,12 @@ void startTest(int selected) {
       accRefSum[i] = 0;
       insideMs[i] = 0;
     }
-    tiltNow = Float.NaN;
-    angleSquares = 0;
-    gyroSquares = 0;
-    imuSamplesIV = 0;
-    directionIV = "REFERENCE (FIRST 3 s)";
+    for (int i = 0; i < 2; i++) {
+      tiltRefIV[i] = 0;
+      tiltSumIV[i] = 0;
+      tiltSquaresIV[i] = 0;
+    }
+    tiltSamplesIV = 0;
   }
 }
 
@@ -608,7 +574,7 @@ void stopTest(boolean completed) {
     elapsedI = min(elapsed, SECTION_I_MS);
     sectionIResult = true;                 // Keep results visible until new Start
   } else if (test <= 5) {
-    elapsedII = min(elapsed, SECTION_II_MS);
+    elapsedII = min(elapsed, test == 5 ? RECOGNITION_MS : SECTION_II_MS);
 
     if (test < 5 && !completed) {
       noteII = "Calibration cancelled; previous values kept.";
@@ -664,12 +630,14 @@ void draw() {                              // Processing calls draw() repeatedly
     }
     if (recording) {
       if (test == -1 && millis() - startMs >= SECTION_I_MS) stopTest(true);
-      else if (test >= 0 && test <= 5 && millis() - startMs >= SECTION_II_MS) stopTest(true);
+      else if (test >= 0 && test <= 5 && millis() - startMs >=
+        (test == 5 ? RECOGNITION_MS : SECTION_II_MS)) stopTest(true);
       else if (test == 7 && millis() - startMs >= SECTION_IV_MS) stopTest(true);
     }
   }
 
   background(255);                         // Clear previous frame to white
+  textFont(normalFont);                     // Restore regular font at every redraw
   drawHeader();                            // Title, connection status and four tabs
   drawHeatmap();                           // Shared live foot map
 
@@ -863,7 +831,7 @@ void drawSectionI() {
   inputBox(188, 676, 135, stepLength, field == 0);
   inputBox(505, 676, 135, stepWidth, field == 1);
   button("Start Recording", 715, 676, 180, !recording);
-  button("Stop", 909, 676, 90, recording && test == -1);
+  button("Stop", 909, 676, 90, true);       // Always visible/enabled; works while I is recording
 
   int ms = (recording && test == -1) ? min(SECTION_I_MS, millis()-startMs) : elapsedI;
   fill(30);
@@ -878,7 +846,8 @@ void drawSectionI() {
   textSize(16);
   textAlign(LEFT, BASELINE);
   text("Estimated steps: " + (sectionIResult || recording ? str(2*contacts) : "--"), 45, 783);
-  text("Cadence: " + (Float.isNaN(C) ? "--" : dec(C)+" steps/min"), 445, 783);
+  String cadenceText = Float.isNaN(C) ? (recording && test == -1 ? "Measuring..." : "--") : dec(C)+" steps/min";
+  text("Cadence: " + cadenceText, 445, 783); // Live after 2 accepted contacts; remains visible after Stop
   text("Step length: " + cm(L), 920, 783);
   text("Stride length: " + cm(2*L), 45, 824); // Approximate: symmetric gait assumed
   text("Step width: " + cm(W), 445, 824);
@@ -895,11 +864,12 @@ void drawSectionII() {
   textSize(19);
   text("Section II - Gait Classification", 45, 637);
 
-  int ms = (recording && test >= 0 && test <= 5) ? min(SECTION_II_MS, millis()-startMs) : elapsedII;
+  int duration = test == 5 ? RECOGNITION_MS : SECTION_II_MS; // 10 s recognition, 30 s calibration
+  int ms = (recording && test >= 0 && test <= 5) ? min(duration, millis()-startMs) : elapsedII;
   fill(65);
   textSize(13);
   textAlign(RIGHT, BASELINE);
-  text(clock(ms) + " / 00:30", 1355, 637);
+  text(clock(ms) + " / " + clock(duration), 1355, 637);
 
   // ----- Same simple panel for all five gait profiles -----
   for (int i = 0; i < 5; i++) {
@@ -985,32 +955,31 @@ void drawSectionIII() {
 }
 
 
-// ========== SECTION IV: GRAPH OF MFP, FFP OR HEEL ==========
+// ========== SECTION IV: THREE SCROLLING MFP, FFP, HEEL GRAPHS ==========
 void drawBalanceGraph(int channel, int x, int y) {
   String[] label = {"MFP (%)", "FFP (%)", "HEEL (ADC)"};
   int maxY = channel == 2 ? 1023 : 100;
-  int left = x+34, top = y+23, w = 345, h = 66;
+  int left = x+34, top = y+23, w = 260, h = 78; // Narrower graphs to leave room for AP/ML
 
   fill(35);
   textAlign(LEFT, BASELINE);
   textSize(13);
   text(label[channel], x, y+10);
   stroke(220);
-  line(left, top, left, top+h);
-  line(left, top+h, left+w, top+h);
+  line(left, top, left, top+h);              // Y axis
+  line(left, top+h, left+w, top+h);          // X axis
   fill(110);
   textSize(10);
   textAlign(RIGHT, CENTER);
   text(str(maxY), left-5, top);
   text("0", left-5, top+h);
 
-  // ----- Sliding 17 s window of THIS SESSION; freeze its X axis after Stop -----
+  // ----- Sliding 15 s window of THIS session; freeze after Stop -----
   int now = (recording && test == 7) ? millis() : balanceEndMs;
-  int from = now - 17000;
-  float tolerance = channel == 2 ? HEEL_TOL :
-    (modeIV == 0 ? (channel == 0 ? MFP_TOL : FFP_TOL) : SHIFT_TOL);
+  int from = now-15000;
+  float tolerance = channel == 2 ? HEEL_TOL : (channel == 0 ? MFP_TOL : FFP_TOL);
 
-  // ----- Draw stored target and tolerance band: game targets change over time -----
+  // ----- Draw the green reference and its tolerance band after calibration -----
   int previous = -1;
   float previousTarget = Float.NaN;
   float previousX = 0;
@@ -1019,31 +988,28 @@ void drawBalanceGraph(int channel, int x, int y) {
     int t = balanceTime[idx];
     if (t < from) continue;
     float target = balanceTarget[channel][idx];
-    if (Float.isNaN(target)) {               // Calibration: no target yet
+    if (Float.isNaN(target)) {              // No target during first 5 s
       previous = -1;
       continue;
     }
     float px = map(t, from, now, left, left+w);
     if (previous >= 0 && t-previous <= 300) {
-      float upper = map(constrain(previousTarget+tolerance, 0, maxY), 0, maxY, top+h, top);
-      float lower = map(constrain(previousTarget-tolerance, 0, maxY), 0, maxY, top+h, top);
+      float upper = map(constrain(target+tolerance, 0, maxY), 0, maxY, top+h, top);
+      float lower = map(constrain(target-tolerance, 0, maxY), 0, maxY, top+h, top);
       noStroke();
       fill(225, 243, 225);
-      rect(previousX, upper, max(0, px-previousX), max(1, lower-upper)); // Historical band
+      rect(previousX, upper, max(0, px-previousX), max(1, lower-upper)); // Tolerance band
 
       stroke(40, 145, 75);
-      float previousY = map(previousTarget, 0, maxY, top+h, top);
-      float currentY = map(target, 0, maxY, top+h, top);
-      line(previousX, previousY, px, previousY); // Horizontal target until this sample
-      if (abs(target-previousTarget) > 0.01f) line(px, previousY, px, currentY);
-      // Vertical jump when the requested Weight Shift direction changes
+      float targetY = map(previousTarget, 0, maxY, top+h, top);
+      line(previousX, targetY, px, targetY); // Reference line between consecutive samples
     }
     previous = t;
     previousTarget = target;
     previousX = px;
   }
 
-  // ----- Plot saved FSR values; HEEL includes zero, MFP/FFP skip undefined ratios -----
+  // ----- Plot measured FSR values; HEEL includes zero, percentages skip NaN -----
   previous = -1;
   noFill();
   stroke(90, 100, 125);
@@ -1056,16 +1022,16 @@ void drawBalanceGraph(int channel, int x, int y) {
 
     float value = balanceValue[channel][idx];
     if (Float.isNaN(value) || (previous >= 0 && t-previous > 300)) {
-      endShape();                           // Missing ratio or data gap: break the curve
+      endShape();                          // Break line across missing or undefined points
       beginShape();
     }
     if (Float.isNaN(value)) {
-      previous = -1;                       // No MFP/FFP when almost no FSR load
+      previous = -1;
       continue;
     }
     float px = map(t, from, now, left, left+w);
     float py = map(value, 0, maxY, top+h, top);
-    vertex(px, py);                        // Connect valid samples in chronological order
+    vertex(px, py);                        // Add sample (time, value) to graph
     previous = t;
   }
   endShape();
@@ -1073,57 +1039,73 @@ void drawBalanceGraph(int channel, int x, int y) {
   fill(110);
   textAlign(CENTER, BASELINE);
   textSize(10);
-  text("-17 s", left, top+h+13);
+  text("-15 s", left, top+h+13);
   text("Now", left+w, top+h+13);
 }
 
 
-// ========== SECTION IV: BALANCE / WEIGHT SHIFT UI ==========
+// ========== SECTION IV: BALANCE CHALLENGE UI ==========
 void drawSectionIV() {
   fill(25);
   textAlign(LEFT, BASELINE);
   textSize(19);
   text("Section IV - Single-Leg Balance Challenge", 45, 637);
-  modeButton("Balance", 525, 615, 110, modeIV == 0);
-  modeButton("Weight Shift Game", 647, 615, 165, modeIV == 1);
 
-  int ms = (recording && test == 7) ? min(SECTION_IV_MS, millis()-startMs) : elapsedIV;
-  fill(55);
-  textSize(14);
-  textAlign(RIGHT, BASELINE);
-  text(clock(ms) + " / 00:20", 1355, 637);
+  // ----- Three plots on the left; narrow panel for AP/ML results on the right -----
+  drawBalanceGraph(0, 45, 660);           // MFP
+  drawBalanceGraph(1, 365, 660);          // FFP
+  drawBalanceGraph(2, 685, 660);          // HEEL
 
-  drawBalanceGraph(0, 45, 664);                 // MFP
-  drawBalanceGraph(1, 485, 664);                // FFP
-  drawBalanceGraph(2, 925, 664);                // HEEL
-
-  fill(75);
-  textSize(12);
+  stroke(215);
+  line(1007, 659, 1007, 863);           // Only a thin divider; no extra box
+  fill(35);
   textAlign(LEFT, BASELINE);
-  String instruction = (recording && test == 7 && ms < IV_REFERENCE_MS) ?
-    "Calibrating reference (first 3 s)..." : directionIV;
-  text(instruction, 45, 795);
+  textSize(15);
+  text("Ankle Orientation", 1025, 679);
 
+  boolean showResults = refReady && !recording && tiltSamplesIV > 0;
+  // Results appear after Stop/20 s, provided reference and exercise samples exist.
+  String meanAP = showResults ? String.format(Locale.US, "%+.1f°", meanTiltIV(0)) : "--";
+  String meanML = showResults ? String.format(Locale.US, "%+.1f°", meanTiltIV(1)) : "--";
+  // ----- Show only the signed AP/ML MEAN TILT after the exercise -----
+  textFont(boldFont);                          // Bold only the AP/ML subheadings
+  textSize(15);
+  text("AP (Forward / Backward)", 1025, 709);
+  textFont(normalFont);                        // Restore normal font for the results
+  textSize(15);
+  text("Mean Tilt: " + meanAP, 1025, 744);
+
+  stroke(232);
+  line(1025, 774, 1355, 774);                 // Simple separator between AP and ML
+  fill(35);
+  textFont(boldFont);
+  textSize(15);
+  text("ML (Medial / Lateral)", 1025, 808);
+  textFont(normalFont);
+  textSize(15);
+  text("Mean Tilt: " + meanML, 1025, 843);
+
+  // ----- Start, Stop, elapsed time and phase: same controls as before -----
   button("Start", 45, 812, 120, !recording);
   button("Stop", 178, 812, 90, recording && test == 7);
+  int ms = (recording && test == 7) ? min(SECTION_IV_MS, millis()-startMs) : elapsedIV;
 
-  fill(40);
-  textSize(13);
+  fill(45);
   textAlign(LEFT, BASELINE);
-  if (modeIV == 0) {
-    String score = "Time in target:  MFP " + ratio(insideMs[0], exerciseMs) +
-      "   FFP " + ratio(insideMs[1], exerciseMs) + "   HEEL " + ratio(insideMs[2], exerciseMs);
-    text(score, 290, 833);
-  } else {
-    text("Target reached: " + ratio(gameHitMs, exerciseMs), 290, 833);
+  textSize(14);
+  text("Time: " + clock(ms) + " / 00:20", 310, 832);
+  String phase = "Ready - 5 s calibration, then 15 s balance exercise.";
+  if (recording && test == 7) {
+    phase = ms < IV_REFERENCE_MS ? "Calibrating reference..." : "Balance assessment...";
+  } else if (refReady) {
+    phase = "Balance test completed.";
   }
+  fill(95);
+  textSize(12);
+  text(phase, 575, 832);
 
-  String tilt = imuSamplesIV > 0 ? dec(sqrt(angleSquares/imuSamplesIV))+"°" : "--";
-  String angular = imuSamplesIV > 0 ? dec2(sqrt(gyroSquares/imuSamplesIV))+" rad/s" : "--";
-  text("Ankle tilt RMS: " + tilt + "    Angular velocity RMS: " + angular, 45, 871);
-  if (noteIV.length() > 0) warning(noteIV, 680, 871);
+  if (noteIV.length() > 0) warning(noteIV, 45, 879);
 }
-
 
 // ========== REUSABLE UI CONTROLS ==========
 void inputBox(int x, int y, int w, String value, boolean selected) {
@@ -1238,26 +1220,16 @@ void mousePressed() {                          // Processing calls this once per
     else if (recording && test == 6 && hit(959, 673, 125, 27)) stopTest(false);
   }
 
-  // ----- Section IV: choose mode or Start / Stop -----
+  // ----- Section IV: only Start and Stop (single Balance mode) -----
   else {
-    if (!recording && hit(525, 615, 110, 27)) {
-      modeIV = 0;
-      refReady = false;
-      elapsedIV = 0;
-      balancePos = 0;
-      balanceCount = 0;
-    } else if (!recording && hit(647, 615, 165, 27)) {
-      modeIV = 1;
-      refReady = false;
-      elapsedIV = 0;
-      balancePos = 0;
-      balanceCount = 0;
-    } else if (!recording && hit(45, 812, 120, 27)) {
+    if (!recording && hit(45, 812, 120, 27)) {
       startTest(7);
     } else if (recording && test == 7 && hit(178, 812, 90, 27)) {
       stopTest(false);
     }
   }
+
+
 }
 
 
